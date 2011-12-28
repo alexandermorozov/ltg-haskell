@@ -25,7 +25,7 @@ data    LTG = LTG {opp :: HBoard, prop :: HBoard, appN :: Int}
 cI, cZero :: Card
 
 cI = Card "I" 1 f
-    where f [x] = return $ id x
+    where f [x] = return $ x
 
 cZero = Card "zero" 0 f
     where f [] = return $ Value 0
@@ -41,21 +41,43 @@ getPropSlot i = do
     ltg <- get
     return $ (hBoard $ prop ltg) ! i
 
+putPropSlot :: Int -> Slot -> State LTG ()
 putPropSlot i s = do
     ltg <- get
     put $ ltg {prop = HBoard ((hBoard $ prop ltg) // [(i, s)])}
 
+setPropField :: Int -> Field -> State LTG ()
+setPropField i f = do
+    Slot h _ <- getPropSlot i
+    putPropSlot i $ Slot h f
+
 doApp :: Int -> State LTG ()
-doApp si = do
-    return ()
+doApp si = do -- TODO inc counter
+    LTG o p n <- get
+    if n >= 1000 then
+        return ()
+    else
+        case hBoard p ! si of
+             Slot _ (Function c fs) ->
+                if cardN c /= length fs then
+                        return ()
+                else do
+                    f <- cardF c $ fs
+                    setPropField si f
 
 leftApp c si = do
     s <- getPropSlot si
+    -- TODO: check arg n
     putPropSlot si $ Slot (sHealth s) (Function c [sField s])
     doApp si
 
-rightApp si f = do
-    return ()
+rightApp c si = do
+    Slot _ f' <- getPropSlot si
+    case f' of
+        Value _       -> fail "Not a function" -- TODO
+        Function c' fs' -> do -- TODO check args n
+            setPropField si (Function c' (fs' ++ [Function c []]))
+            doApp si
 
 
 --cInc = Card "inc" 1 f
@@ -67,7 +89,7 @@ createHBoard = HBoard $ listArray (0, 255) (repeat $ Slot (Health 10000) (Functi
 printHBoard :: HBoard -> IO ()
 printHBoard (HBoard slots) = do
     let changed = filter hasChanged (assocs slots)
-    mapM_ (putStrLn . format) changed 
+    mapM_ (putStrLn . format) changed
     where
         hasChanged (i, Slot (Health 10000) (Function cI [])) = False
         hasChanged _ = True
@@ -82,18 +104,23 @@ printHBoard (HBoard slots) = do
 
 printLTG :: LTG -> IO ()
 printLTG ltg = do
-    putStrLn "prop"
+    putStrLn "prop:"
     printHBoard $ prop ltg
-    putStrLn "opp"
+    putStrLn "opp:"
     printHBoard $ opp ltg
 
 main = do
     let HBoard a = createHBoard
     let a' = a // [(1, Slot (Health 100) (Function cZero [])), (4, Slot (Health 10000) (Value 0))]
     let st = LTG createHBoard createHBoard 0
-    let st' = (execState (leftApp cI 1) st) :: LTG
+    --let st' = (execState (leftApp cK 1) st)
+    let st' = (flip execState) st $ do
+        leftApp cK 1
+        leftApp cK 1
+        rightApp cZero 2
+        leftApp cK 2
+        rightApp cZero 2
     printLTG st'
-    printHBoard $ HBoard a'
-
+    -- printHBoard $ HBoard a'
     --putStrLn $ show b
 
