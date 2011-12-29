@@ -8,20 +8,12 @@ data    Card   = Card { cardName :: String
                       , cardN :: Int
                       , cardF :: ([Field] -> State LTG Field)
                       }
-
 instance Eq Card where
     c == c' = cardName c == cardName c'
 
-
-data    Field  = Value Int
-               | Function Card [Field]
-
-newtype Health = Health Int deriving (Show)
-
-data    Slot   = Slot { sHealth :: Health
-                      , sField :: Field
-                      }
-
+data    Field  = Value Int | Function Card [Field]
+newtype Health = Health Int deriving (Show, Eq, Ord) -- xx: delete?
+data    Slot   = Slot { sHealth :: Health, sField :: Field }
 type    HBoard = DiffArray Int Slot
 
 data    LTG = LTG { opp :: HBoard
@@ -30,10 +22,7 @@ data    LTG = LTG { opp :: HBoard
                   }
 
 
--- getSlot i =
-
---addHealth i h = 0
---    ltg <- get
+-- xx: replace 'fail' with a monad transformer
 
 cI, cZero :: Card
 
@@ -44,11 +33,21 @@ cZero = Card "zero" 0 f
     where f [] = return $ Value 0
 
 cSucc = Card "succ" 1 f
-    where f [Value x] = return $ Value (x+1)
+    where f [x] = do
+            x' <- toInt x
+            return $ Value (x' + 1)
 
 cK = Card "K" 2 f
     where f [x, y] = return x
 
+
+
+toInt :: Field -> State LTG Int
+toInt f = do
+    f' <- forceApp f
+    case f' of
+        Value i -> return i
+        _       -> fail "Not an integer"
 
 getPropSlot i = do
     ltg <- get
@@ -59,42 +58,48 @@ putPropSlot i s = do
     ltg <- get
     put $ ltg {prop = (prop ltg) // [(i, s)]}
 
-setPropField :: Int -> Field -> State LTG ()
-setPropField i f = do
+putPropField :: Int -> Field -> State LTG ()
+putPropField i f = do
     Slot h _ <- getPropSlot i
     putPropSlot i $ Slot h f
 
-doApp :: Int -> State LTG ()
-doApp si = do -- TODO inc counter
-    LTG o p n <- get
-    if n >= 1000 then
-        return ()
-        else
-            case p ! si of
-                 Slot _ (Function c fs) ->
-                    if cardN c /= length fs then
-                            return ()
-                    else do
-                        f <- cardF c $ fs
-                        setPropField si f
+isAlive :: Slot -> Bool
+isAlive s = sHealth s > Health 0
 
+forceApp :: Field -> State LTG Field
+forceApp f = do
+    case f of
+        Value i -> return f
+        Function c args -> do
+            if cardN c /= length args
+                then return f
+                else incAppCount >> (cardF c) args
+    where incAppCount = do
+            ltg@(LTG _ _ n) <- get
+            case n of -- xx: is it the right place?
+                1000 -> fail "Recursion depth exceeded"
+            put $ ltg {appN = n + 1}
+
+
+-- apply card to slot
 leftApp c si = do
-    s <- getPropSlot si
-    -- TODO: check arg n
-    putPropSlot si $ Slot (sHealth s) (Function c [sField s])
-    doApp si
+    -- xx: check card arg n
+    --     check if slot is dead
+    Slot h f <- getPropSlot si
+    f' <- forceApp $ Function c [f]
+    putPropField si f'
 
+-- apply slot to card
 rightApp c si = do
-    Slot _ f' <- getPropSlot si
-    case f' of
-        Value _       -> fail "Not a function" -- TODO
-        Function c' fs' -> do -- TODO check args n
-            setPropField si (Function c' (fs' ++ [Function c []]))
-            doApp si
+    -- xx: check slot arg n
+    --     check if slot is dead
+    Slot h f <- getPropSlot si
+    case f of
+        Value _         -> fail "Not a function"
+        Function c' fs' -> -- xx check args n
+            forceApp (Function c' (fs' ++ [Function c []])) >>= putPropField si
 
 
---cInc = Card "inc" 1 f
---    where f [i] = addHealth i $ Health 1
 
 
 createHBoard = listArray (0, 255) (repeat $ Slot (Health 10000) (Function cI []))
@@ -128,9 +133,12 @@ main = do
     let st = LTG createHBoard createHBoard 0
     --let st' = (execState (leftApp cK 1) st)
     let st' = (flip execState) st $ do
-        leftApp cK 1
+        rightApp cK 1
         leftApp cK 1
         rightApp cZero 2
+        leftApp cSucc 2
+        leftApp cSucc 2
+        rightApp cZero 3
         --leftApp cK 2
         --rightApp cZero 2
     printLTG st'
