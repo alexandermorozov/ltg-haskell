@@ -9,12 +9,25 @@ data    Card   = Card { cardName :: String
                       , cardF :: ([Field] -> State LTG Field)
                       }
 
-data    Field  = Value Int | Function Card [Field]
+instance Eq Card where
+    c == c' = cardName c == cardName c'
+
+
+data    Field  = Value Int
+               | Function Card [Field]
 
 newtype Health = Health Int deriving (Show)
-data    Slot   = Slot {sHealth :: Health, sField :: Field}
-newtype HBoard = HBoard {hBoard :: DiffArray Int Slot}
-data    LTG = LTG {opp :: HBoard, prop :: HBoard, appN :: Int}
+
+data    Slot   = Slot { sHealth :: Health
+                      , sField :: Field
+                      }
+
+type    HBoard = DiffArray Int Slot
+
+data    LTG = LTG { opp :: HBoard
+                  , prop :: HBoard
+                  , appN :: Int
+                  }
 
 
 -- getSlot i =
@@ -39,12 +52,12 @@ cK = Card "K" 2 f
 
 getPropSlot i = do
     ltg <- get
-    return $ (hBoard $ prop ltg) ! i
+    return $ (prop ltg) ! i
 
 putPropSlot :: Int -> Slot -> State LTG ()
 putPropSlot i s = do
     ltg <- get
-    put $ ltg {prop = HBoard ((hBoard $ prop ltg) // [(i, s)])}
+    put $ ltg {prop = (prop ltg) // [(i, s)]}
 
 setPropField :: Int -> Field -> State LTG ()
 setPropField i f = do
@@ -56,14 +69,14 @@ doApp si = do -- TODO inc counter
     LTG o p n <- get
     if n >= 1000 then
         return ()
-    else
-        case hBoard p ! si of
-             Slot _ (Function c fs) ->
-                if cardN c /= length fs then
-                        return ()
-                else do
-                    f <- cardF c $ fs
-                    setPropField si f
+        else
+            case p ! si of
+                 Slot _ (Function c fs) ->
+                    if cardN c /= length fs then
+                            return ()
+                    else do
+                        f <- cardF c $ fs
+                        setPropField si f
 
 leftApp c si = do
     s <- getPropSlot si
@@ -84,14 +97,14 @@ rightApp c si = do
 --    where f [i] = addHealth i $ Health 1
 
 
-createHBoard = HBoard $ listArray (0, 255) (repeat $ Slot (Health 10000) (Function cI []))
+createHBoard = listArray (0, 255) (repeat $ Slot (Health 10000) (Function cI []))
 
 printHBoard :: HBoard -> IO ()
-printHBoard (HBoard slots) = do
+printHBoard slots = do
     let changed = filter hasChanged (assocs slots)
     mapM_ (putStrLn . format) changed
     where
-        hasChanged (i, Slot (Health 10000) (Function cI [])) = False
+        hasChanged (_, Slot (Health 10000) (Function c [])) = c /= cI
         hasChanged _ = True
 
         format (i, Slot (Health h) f) = printf "%d={%d,%s}" i h (formatField f)
@@ -110,7 +123,7 @@ printLTG ltg = do
     printHBoard $ opp ltg
 
 main = do
-    let HBoard a = createHBoard
+    let a = createHBoard
     let a' = a // [(1, Slot (Health 100) (Function cZero [])), (4, Slot (Health 10000) (Value 0))]
     let st = LTG createHBoard createHBoard 0
     --let st' = (execState (leftApp cK 1) st)
@@ -118,9 +131,10 @@ main = do
         leftApp cK 1
         leftApp cK 1
         rightApp cZero 2
-        leftApp cK 2
-        rightApp cZero 2
+        --leftApp cK 2
+        --rightApp cZero 2
     printLTG st'
+    putStrLn $ show (cI == cZero)
     -- printHBoard $ HBoard a'
     --putStrLn $ show b
 
