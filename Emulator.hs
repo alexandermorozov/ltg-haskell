@@ -12,15 +12,16 @@ data    Card   = Card { cardName :: String
 
 data    Field  = Value Int | Function Card [Field]
 
-newtype Health = Health Int deriving (Show, Eq, Ord) -- xx: delete?
-data    Slot   = Slot { sHealth :: Health, sField :: Field }
-type    HBoard = DiffArray Int Slot
-data    AppOrder = LeftApp | RightApp
-data    Player = Opp | Prop deriving (Eq)
-data    LTG = LTG { opp :: HBoard
-                  , prop :: HBoard
-                  , appN :: Int
-                  }
+type Health   = Int
+type SlotIdx  = Int
+data Slot     = Slot { sHealth :: Health, sField :: Field }
+type HBoard   = DiffArray SlotIdx Slot
+data AppOrder = LeftApp | RightApp
+data Player   = Opp | Prop deriving (Eq)
+data LTG      = LTG { opp :: HBoard
+                    , prop :: HBoard
+                    , appN :: Int
+                    }
 
 instance Eq Card where
     c == c' = cardName c == cardName c'
@@ -65,17 +66,26 @@ cS = Card "S" 3 $ \[f,g,x] -> do
 
 cK = Card "K" 2 $ \[x,y] -> return x
 
---cInc = Card "inc" 1 $ \[i] -> do
---          i' <- toSlotNumber i
+cInc = Card "inc" 1 $ \[i] -> do
+          i' <- toSlotNumber i
+          s@(Slot h _) <- getSlot Prop i'
+          when (h > 0 && h < 65535) $ putSlot Prop i' s {sHealth = (h+1)}
+          return $ Function cI []
 
-getSlot :: Player -> Int -> State LTG Slot
+cDec = Card "dec" 1 $ \[i] -> do
+          i' <- liftM (\a -> 255 - a) $ toSlotNumber i
+          s@(Slot h _) <- getSlot Opp i'
+          when (h > 0) $ putSlot Opp i' s {sHealth = (h-1)}
+          return $ Function cI []
+
+getSlot :: Player -> SlotIdx -> State LTG Slot
 getSlot p i = do
     let selector = if (p == Prop) then prop else opp
     ltg <- get
     return $ (selector ltg) ! i
 
 
-putSlot :: Player -> Int -> Slot -> State LTG ()
+putSlot :: Player -> SlotIdx -> Slot -> State LTG ()
 putSlot p i s = do
     ltg <- get
     put $ if (p == Prop)
@@ -87,8 +97,15 @@ putField p i f = do
     s <- getSlot p i
     putSlot p i s {sField = f}
 
+modifyHealth :: Player -> SlotIdx -> Health -> State LTG ()
+modifyHealth p i dh = do
+    (Slot h f) <- getSlot p i
+    let new = min 65535 $ max 0 $ h + dh
+    putSlot p i (Slot new f)
+
 isAlive :: Slot -> Bool
-isAlive s = sHealth s > Health 0
+isAlive s = sHealth s > 0
+
 
 apply :: Field -> Field -> State LTG Field
 apply a b =
@@ -110,7 +127,7 @@ toInt f =
             f' <- (cardF c) args
             toInt f'
 
-toSlotNumber :: Field -> State LTG Int
+toSlotNumber :: Field -> State LTG SlotIdx
 toSlotNumber f = do
     i <- toInt f
     when (i > 255 || i < 0) $ fail "Invalid slot number"
@@ -135,7 +152,7 @@ reverseBoard = do
 applyCard order i c = do
     resetAppCounter
     Slot h f <- getSlot Prop i
-    when (h <= Health 0) $ fail "Slot is dead"
+    when (h <= 0) $ fail "Slot is dead"
     f' <- case order of
             LeftApp  -> apply (Function c []) f
             RightApp -> apply f (Function c [])
@@ -146,17 +163,17 @@ rightApp = applyCard RightApp
 leftApp  = applyCard LeftApp
 
 
-createHBoard = listArray (0, 25) (repeat $ Slot (Health 10000) (Function cI []))
+createHBoard = listArray (0, 255) (repeat $ Slot 10000 (Function cI []))
 
 printHBoard :: HBoard -> IO ()
 printHBoard slots = do
     let changed = filter hasChanged (assocs slots)
     mapM_ (putStrLn . format) changed
     where
-        hasChanged (_, Slot (Health 10000) (Function c [])) = c /= cI
+        hasChanged (_, Slot 10000 (Function c [])) = c /= cI
         hasChanged _ = True
 
-        format (i, Slot (Health h) f) = printf "%d={%d,%s}" i h (show f)
+        format (i, Slot h f) = printf "%d={%d,%s}" i h (show f)
 
 
 
@@ -168,20 +185,11 @@ printLTG ltg = do
     printHBoard $ opp ltg
 
 main = do
-    let a = createHBoard
-    let a' = a // [(1, Slot (Health 100) (Function cZero [])), (4, Slot (Health 10000) (Value 0))]
     let st = LTG createHBoard createHBoard 0
-    --let st' = (execState (leftApp cK 1) st)
     let st' = (flip execState) st $ do
         rightApp 1 cK
-        leftApp 1 cK
-        rightApp 4 cK
         rightApp 2 cZero
-        leftApp 2 cSucc
-        leftApp 2 cSucc
-        leftApp 2 cDbl
-        leftApp 2 cGet
-        leftApp 2 cPut
+        leftApp  2 cDec
         --leftApp cK 2
         --rightApp cZero 2
     printLTG st'
