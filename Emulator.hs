@@ -15,7 +15,8 @@ data    Field  = Value Int | Function Card [Field]
 newtype Health = Health Int deriving (Show, Eq, Ord) -- xx: delete?
 data    Slot   = Slot { sHealth :: Health, sField :: Field }
 type    HBoard = DiffArray Int Slot
-
+data    AppOrder = LeftApp | RightApp
+data    Player = Opp | Prop deriving (Eq)
 data    LTG = LTG { opp :: HBoard
                   , prop :: HBoard
                   , appN :: Int
@@ -50,34 +51,41 @@ cDbl = Card "dbl" 1 $ \[x] -> do
 
 cGet = Card "get" 1 $ \[i] -> do
           i' <- toInt i
-          s@(Slot _ f) <- getPropSlot i'
+          s@(Slot _ f) <- getSlot Prop i'
           if isAlive s
               then return f
               else fail "Slot is dead"
 
 cPut = Card "put" 1 $ \[_] -> return $ Function cI []
 
-cK = Card "K" 2 $ \[x,y] -> return x
-
 cS = Card "S" 3 $ \[f,g,x] -> do
           h <- apply f x
           y <- apply g x
           apply h y
 
+cK = Card "K" 2 $ \[x,y] -> return x
 
-getPropSlot i = do
+--cInc = Card "inc" 1 $ \[i] -> do
+--          i' <- toSlotNumber i
+
+getSlot :: Player -> Int -> State LTG Slot
+getSlot p i = do
+    let selector = if (p == Prop) then prop else opp
     ltg <- get
-    return $ (prop ltg) ! i
+    return $ (selector ltg) ! i
 
-putPropSlot :: Int -> Slot -> State LTG ()
-putPropSlot i s = do
+
+putSlot :: Player -> Int -> Slot -> State LTG ()
+putSlot p i s = do
     ltg <- get
-    put $ ltg {prop = (prop ltg) // [(i, s)]}
+    put $ if (p == Prop)
+        then ltg {prop = (prop ltg) // [(i, s)]}
+        else ltg {opp  = (opp  ltg) // [(i, s)]}
 
-putPropField :: Int -> Field -> State LTG ()
-putPropField i f = do
-    s <- getPropSlot i
-    putPropSlot i s {sField = f}
+putField :: Player -> Int -> Field -> State LTG ()
+putField p i f = do
+    s <- getSlot p i
+    putSlot p i s {sField = f}
 
 isAlive :: Slot -> Bool
 isAlive s = sHealth s > Health 0
@@ -102,6 +110,12 @@ toInt f =
             f' <- (cardF c) args
             toInt f'
 
+toSlotNumber :: Field -> State LTG Int
+toSlotNumber f = do
+    i <- toInt f
+    when (i > 255 || i < 0) $ fail "Invalid slot number"
+    return i
+
 incAppCounter :: State LTG ()
 incAppCounter = do
     ltg@(LTG _ _ n) <- get
@@ -113,25 +127,23 @@ resetAppCounter = do
     ltg <- get
     put $ ltg {appN = 0}
 
+reverseBoard :: State LTG ()
+reverseBoard = do
+    ltg <- get
+    put $ ltg {prop = opp ltg, opp = prop ltg}
 
-
--- xx: merge those functions?
--- apply card to slot
-leftApp si c = do
+applyCard order i c = do
     resetAppCounter
-    Slot h f <- getPropSlot si
+    Slot h f <- getSlot Prop i
     when (h <= Health 0) $ fail "Slot is dead"
-    f' <- apply (Function c []) f
-    putPropField si f'
+    f' <- case order of
+            LeftApp  -> apply (Function c []) f
+            RightApp -> apply f (Function c [])
+    putField Prop i f'
 
--- apply slot to card
-rightApp si c = do
-    resetAppCounter
-    Slot h f <- getPropSlot si
-    when (h <= Health 0) $ fail "Slot is dead"
-    f' <- apply f (Function c [])
-    putPropField si f'
-
+-- convinience
+rightApp = applyCard RightApp
+leftApp  = applyCard LeftApp
 
 
 createHBoard = listArray (0, 25) (repeat $ Slot (Health 10000) (Function cI []))
