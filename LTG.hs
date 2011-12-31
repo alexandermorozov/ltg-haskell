@@ -1,7 +1,28 @@
-import Data.Array.MArray
+module LTG
+    (
+      AppOrder
+    , Player
+    , cLookup
+    , defaultLTG
+    , applyCard
+    , leftApp
+    , rightApp
+    , printLTG
+    ) where
+
+{-
+TODO:
+   * custom monad. As far as I understand, there is no way to combine State
+        monad with another transformer to get desired termination rules.
+   * zombie mode / scan
+
+Not sure:
+   * It could be nice to split this module, but then I'll have to export too
+        much functions.
+-}
 import Data.Array.Diff
 import Text.Printf
-import Data.List
+import Data.List (intercalate)
 import Control.Monad.State
 import Debug.Trace
 
@@ -33,8 +54,8 @@ instance Show Field where
                 "(" ++ (intercalate ", " $ map show args) ++ ")"
 
 
--- xx: replace 'fail' with a monad transformer
--- xx: 'case' syntax and indentation. Replace with if/then?
+
+------------------------------------------------------- Cards
 
 cI = Card "I" 1 $ \[x] ->
           return x
@@ -82,7 +103,7 @@ cAttack = Card "attack" 3 $ \[i,j,n] -> do
           modifyHealth Prop i' (-n')
 
           j' <- toSlotNumber j
-          modifyHealth Opp (255-j') $ -(n'*9 `quot` 10)
+          modifyHealth Opp (255-j') $ -n'*9 `quot` 10
           returnI
 
 cHelp = Card "help" 3 $ \[i,j,n] -> do
@@ -113,6 +134,15 @@ cZombie = Card "zombie" 1 $ \[i,x] -> do
           putSlot Opp (255-i') $ Slot (-1) x
           returnI
 
+allCards = [cI, cZero, cSucc, cDbl, cGet, cPut, cS, cK, cInc, cDec, cAttack,
+        cHelp, cCopy, cRevive, cZombie]
+
+-- xx: use Map?
+cLookup :: String -> Card
+cLookup name = head $ filter match allCards
+    where match c = cardName c == name
+
+------------------------------------------------------- Card support functions
 
 getSlot :: Player -> SlotIdx -> State LTG Slot
 getSlot p i = do
@@ -180,6 +210,9 @@ toSlotNumber f = do
     when (i > 255 || i < 0) $ fail "Invalid slot number"
     return i
 
+
+------------------------------------------------------- Game functions
+
 incAppCounter :: State LTG ()
 incAppCounter = do
     ltg@(LTG _ _ n) <- get
@@ -210,7 +243,9 @@ rightApp = applyCard RightApp
 leftApp  = applyCard LeftApp
 
 
-createHBoard = listArray (0, 255) (repeat $ Slot 10000 (Function cI []))
+defaultHBoard = listArray (0, 255) (repeat $ Slot 10000 (Function cI []))
+defaultLTG = LTG defaultHBoard defaultHBoard 0
+
 
 printHBoard :: HBoard -> IO ()
 printHBoard slots = do
@@ -223,23 +258,10 @@ printHBoard slots = do
         format (i, Slot h f) = printf "%d={%d,%s}" i h (show f)
 
 
-
 printLTG :: LTG -> IO ()
 printLTG ltg = do
     putStrLn "prop:"
     printHBoard $ prop ltg
     putStrLn "opp:"
     printHBoard $ opp ltg
-
-main = do
-    let st = LTG createHBoard createHBoard 0
-    let st' = (flip execState) st $ do
-        rightApp 1 cK
-        rightApp 2 cZero
-        leftApp  2 cDec
-        --leftApp cK 2
-        --rightApp cZero 2
-    printLTG st'
-    -- printHBoard $ HBoard a'
-    --putStrLn $ show b
 
