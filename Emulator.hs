@@ -37,7 +37,7 @@ instance Show Field where
 -- xx: 'case' syntax and indentation. Replace with if/then?
 
 cI = Card "I" 1 $ \[x] ->
-          return $ x
+          return x
 
 cZero = Card "zero" 0 $ \[] ->
           return $ Value 0
@@ -67,16 +67,27 @@ cS = Card "S" 3 $ \[f,g,x] -> do
 cK = Card "K" 2 $ \[x,y] -> return x
 
 cInc = Card "inc" 1 $ \[i] -> do
-          i' <- toSlotNumber i
-          s@(Slot h _) <- getSlot Prop i'
-          when (h > 0 && h < 65535) $ putSlot Prop i' s {sHealth = (h+1)}
+          toSlotNumber i >>= modifyHealth Prop 1
           return $ Function cI []
 
 cDec = Card "dec" 1 $ \[i] -> do
-          i' <- liftM (\a -> 255 - a) $ toSlotNumber i
-          s@(Slot h _) <- getSlot Opp i'
-          when (h > 0) $ putSlot Opp i' s {sHealth = (h-1)}
+          toSlotNumber i >>= modifyHealth Opp (-1)
           return $ Function cI []
+
+cAttack = Card "attack" 3 $ \[i,j,n] -> do
+          i' <- toSlotNumber i
+          n' <- toInt n
+          ph <- getHealth Prop i'
+          when (n' > ph) $ fail "Not enough vitality"
+          modifyHealth Prop i' (-n')
+
+          j' <- toSlotNumber j
+          modifyHealth Opp (255-j') $ -(n'*9 `quot` 10)
+          return $ Function cI []
+
+--cHelp = Card "help" 3 $ \[i,j,n] -> do
+
+
 
 getSlot :: Player -> SlotIdx -> State LTG Slot
 getSlot p i = do
@@ -97,11 +108,16 @@ putField p i f = do
     s <- getSlot p i
     putSlot p i s {sField = f}
 
-modifyHealth :: Player -> SlotIdx -> Health -> State LTG ()
-modifyHealth p i dh = do
-    (Slot h f) <- getSlot p i
-    let new = min 65535 $ max 0 $ h + dh
-    putSlot p i (Slot new f)
+getHealth :: Player -> SlotIdx -> State LTG Int
+getHealth p i = do
+    (Slot h _) <- getSlot p i
+    return h
+
+modifyHealth :: Player -> Health -> SlotIdx -> State LTG ()
+modifyHealth p dh i = do
+    s@(Slot h _) <- getSlot p i
+    let newH = min 65535 $ max 0 $ h + dh
+    when (isAlive s) $ putSlot p i s {sHealth = newH}
 
 isAlive :: Slot -> Bool
 isAlive s = sHealth s > 0
