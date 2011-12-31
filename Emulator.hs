@@ -57,7 +57,7 @@ cGet = Card "get" 1 $ \[i] -> do
               then return f
               else fail "Slot is dead"
 
-cPut = Card "put" 1 $ \[_] -> return $ Function cI []
+cPut = Card "put" 1 $ \[_] -> returnI
 
 cS = Card "S" 3 $ \[f,g,x] -> do
           h <- apply f x
@@ -68,11 +68,11 @@ cK = Card "K" 2 $ \[x,y] -> return x
 
 cInc = Card "inc" 1 $ \[i] -> do
           toSlotNumber i >>= modifyHealth Prop 1
-          return $ Function cI []
+          returnI
 
 cDec = Card "dec" 1 $ \[i] -> do
           toSlotNumber i >>= modifyHealth Opp (-1)
-          return $ Function cI []
+          returnI
 
 cAttack = Card "attack" 3 $ \[i,j,n] -> do
           i' <- toSlotNumber i
@@ -83,10 +83,35 @@ cAttack = Card "attack" 3 $ \[i,j,n] -> do
 
           j' <- toSlotNumber j
           modifyHealth Opp (255-j') $ -(n'*9 `quot` 10)
-          return $ Function cI []
+          returnI
 
---cHelp = Card "help" 3 $ \[i,j,n] -> do
+cHelp = Card "help" 3 $ \[i,j,n] -> do
+          i' <- toSlotNumber i
+          n' <- toInt n
+          ph <- getHealth Prop i'
+          when (n' > ph) $ fail "Not enough vitality"
+          modifyHealth Prop i' (-n')
 
+          j' <- toSlotNumber j
+          modifyHealth Prop j' $ n'*11 `quot` 10
+          returnI
+
+cCopy = Card "copy" 1 $ \[i] -> do
+          i' <- toSlotNumber i
+          getField Opp i'
+
+cRevive = Card "revive" 1 $ \[i] -> do
+          i' <- toSlotNumber i
+          ph <- getHealth Prop i'
+          when (ph <= 0) $ modifyHealth Prop i' (1 - ph)
+          returnI
+
+cZombie = Card "zombie" 1 $ \[i,x] -> do
+          i' <- toSlotNumber i
+          oh <- getHealth Opp (255-i')
+          unless (oh <= 0) $ fail "Slot is alive"
+          putSlot Opp (255-i') $ Slot (-1) x
+          returnI
 
 
 getSlot :: Player -> SlotIdx -> State LTG Slot
@@ -103,10 +128,15 @@ putSlot p i s = do
         then ltg {prop = (prop ltg) // [(i, s)]}
         else ltg {opp  = (opp  ltg) // [(i, s)]}
 
-putField :: Player -> Int -> Field -> State LTG ()
+putField :: Player -> SlotIdx -> Field -> State LTG ()
 putField p i f = do
     s <- getSlot p i
     putSlot p i s {sField = f}
+
+getField :: Player -> SlotIdx -> State LTG Field
+getField p i = do
+    (Slot _ f) <- getSlot p i
+    return f
 
 getHealth :: Player -> SlotIdx -> State LTG Int
 getHealth p i = do
@@ -122,6 +152,7 @@ modifyHealth p dh i = do
 isAlive :: Slot -> Bool
 isAlive s = sHealth s > 0
 
+returnI = return $ Function cI []
 
 apply :: Field -> Field -> State LTG Field
 apply a b =
