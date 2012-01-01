@@ -1,13 +1,14 @@
 module LTG
     (
-      AppOrder
-    , Player
+      AppOrder (..)
+    , LTG (ltgAppN, ltgTurn, ltgPlayer)
+    , Player (..)
     , cLookup
     , defaultLTG
     , applyCard
-    , leftApp
-    , rightApp
-    , printLTG
+    , swapPlayers
+    , incrementTurn
+    , printHBoard
     ) where
 
 {-
@@ -20,6 +21,7 @@ Not sure:
    * It could be nice to split this module, but then I'll have to export too
         much functions.
 -}
+
 import Data.Array.Diff
 import Text.Printf
 import Data.List (intercalate)
@@ -39,13 +41,18 @@ data Slot     = Slot { sHealth :: Health, sField :: Field }
 type HBoard   = DiffArray SlotIdx Slot
 data AppOrder = LeftApp | RightApp
 data Player   = Opp | Prop deriving (Eq)
-data LTG      = LTG { opp :: HBoard
-                    , prop :: HBoard
-                    , appN :: Int
+data LTG      = LTG { ltgOpp :: HBoard
+                    , ltgProp :: HBoard
+                    , ltgAppN :: Int -- xx: not sure if it should be here
+                    , ltgTurn :: Int
+                    , ltgPlayer :: Int -- 0 or 1
                     }
 
 instance Eq Card where
     c == c' = cardName c == cardName c'
+
+instance Show Card where
+    show c = cardName c
 
 instance Show Field where
     show (Value v) = show v
@@ -146,7 +153,7 @@ cLookup name = head $ filter match allCards
 
 getSlot :: Player -> SlotIdx -> State LTG Slot
 getSlot p i = do
-    let selector = if (p == Prop) then prop else opp
+    let selector = if (p == Prop) then ltgProp else ltgOpp
     ltg <- get
     return $ (selector ltg) ! i
 
@@ -155,8 +162,8 @@ putSlot :: Player -> SlotIdx -> Slot -> State LTG ()
 putSlot p i s = do
     ltg <- get
     put $ if (p == Prop)
-        then ltg {prop = (prop ltg) // [(i, s)]}
-        else ltg {opp  = (opp  ltg) // [(i, s)]}
+        then ltg {ltgProp = (ltgProp ltg) // [(i, s)]}
+        else ltg {ltgOpp  = (ltgOpp  ltg) // [(i, s)]}
 
 putField :: Player -> SlotIdx -> Field -> State LTG ()
 putField p i f = do
@@ -215,20 +222,17 @@ toSlotNumber f = do
 
 incAppCounter :: State LTG ()
 incAppCounter = do
-    ltg@(LTG _ _ n) <- get
+    ltg@(LTG _ _ n _ _) <- get
     when (n == 1000) $ fail "Recursion depth exceeded"
-    put $ ltg {appN = n + 1}
+    put $ ltg {ltgAppN = n + 1}
 
 resetAppCounter :: State LTG ()
 resetAppCounter = do
     ltg <- get
-    put $ ltg {appN = 0}
+    put $ ltg {ltgAppN = 0}
 
-reverseBoard :: State LTG ()
-reverseBoard = do
-    ltg <- get
-    put $ ltg {prop = opp ltg, opp = prop ltg}
 
+applyCard :: AppOrder -> SlotIdx -> Card ->  State LTG ()
 applyCard order i c = do
     resetAppCounter
     Slot h f <- getSlot Prop i
@@ -238,17 +242,22 @@ applyCard order i c = do
             RightApp -> apply f (Function c [])
     putField Prop i f'
 
--- convinience
-rightApp = applyCard RightApp
-leftApp  = applyCard LeftApp
 
+
+
+swapPlayers :: LTG -> LTG
+swapPlayers ltg =
+    ltg {ltgProp = ltgOpp ltg, ltgOpp = ltgProp ltg, ltgPlayer = 1 - ltgPlayer ltg}
 
 defaultHBoard = listArray (0, 255) (repeat $ Slot 10000 (Function cI []))
-defaultLTG = LTG defaultHBoard defaultHBoard 0
+defaultLTG = LTG defaultHBoard defaultHBoard 0 1 0
 
+incrementTurn :: LTG -> LTG
+incrementTurn ltg = ltg {ltgTurn = 1 + ltgTurn ltg}
 
-printHBoard :: HBoard -> IO ()
-printHBoard slots = do
+printHBoard :: Player -> LTG -> IO ()
+printHBoard p ltg = do
+    let slots = if (p == Prop) then ltgProp ltg else ltgOpp ltg
     let changed = filter hasChanged (assocs slots)
     mapM_ (putStrLn . format) changed
     where
@@ -260,8 +269,8 @@ printHBoard slots = do
 
 printLTG :: LTG -> IO ()
 printLTG ltg = do
-    putStrLn "prop:"
-    printHBoard $ prop ltg
-    putStrLn "opp:"
-    printHBoard $ opp ltg
+    putStrLn "ltgProp:"
+    printHBoard Prop ltg
+    putStrLn "ltgOpp:"
+    printHBoard Opp ltg
 
