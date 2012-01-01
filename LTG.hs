@@ -3,6 +3,7 @@ module LTG
       AppOrder (..)
     , LTG (ltgAppN, ltgTurn, ltgPlayer)
     , Card
+    , SlotIdx
     , Player (..)
     , cLookup
     , defaultLTG
