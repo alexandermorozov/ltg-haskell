@@ -1,0 +1,7 @@
+*.o
+*.hi
+.*
+
+Emulator
+Scratchpad
+ltg.linux64
