@@ -2,6 +2,7 @@ module LTG
     (
       AppOrder (..)
     , LTG (ltgAppN, ltgTurn, ltgPlayer)
+    , Card
     , Player (..)
     , cLookup
     , defaultLTG

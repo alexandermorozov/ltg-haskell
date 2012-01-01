@@ -1,7 +1,8 @@
 import LTG
 import System.Environment (getArgs)
+import System.Process
 import Control.Monad.State
-
+import Data.Tuple
 
 oneStep :: LTG -> IO LTG
 oneStep ltg = do
@@ -10,14 +11,11 @@ oneStep ltg = do
     printHBoard Prop ltg
     putStrLn "(slots {10000,I} are omitted)"
 
-    putStrLn "(1) apply card to slot, or (2) apply slot to card?"
-    order <- liftM parseOrder getLine
-
-    putStrLn "card name?"
-    card <- liftM cLookup getLine
-
-    putStrLn "slot no?"
-    slot <- liftM read getLine :: IO Int
+    order <- getOrder
+    -- xx: too complex? any simpler way?
+    (card, slot) <- case order of
+            LeftApp -> liftM2 (,) getCard getSlot
+            RightApp -> liftM swap $ liftM2 (,) getSlot getCard
 
     putStrLn $ case order of
         LeftApp ->  "player 0 applied card " ++ (show card) ++ " to slot " ++ (show slot)
@@ -29,6 +27,10 @@ oneStep ltg = do
             case read orderL of
                 1 -> LeftApp
                 2 -> RightApp
+        getOrder = putStrLn "(1) apply card to slot, or (2) apply slot to card?" >>
+                       liftM parseOrder getLine
+        getCard = putStrLn "card name?" >> liftM cLookup getLine
+        getSlot = putStrLn "slot no?" >> liftM read getLine
 
 
 runOnly :: IO LTG
@@ -44,13 +46,24 @@ runAlt = do
             oneStep . swapPlayers >>=
             helper . incrementTurn . swapPlayers
 
+runMatch [prog0, prog1] = do
+    (Just s0, Just o0, _, _) <- cProc prog0 "0"
+    (Just s1, Just o1, _, _) <- cProc prog1 "1"
+    helper defaultLTG
+    where
+        cProc prog i = createProcess
+            (proc prog [i]) { std_in = CreatePipe, std_out = CreatePipe}
+
+        helper ltg = return ltg
+
+
 main = do
     args <- getArgs
     when (length args == 0) $ fail "Usage: ./xx only|alt|match [prog1] [prog2]"
     case head args of
         "only"  -> runOnly
         "alt"   -> runAlt
-        "match" -> fail "Not implemented"
+        "match" -> runMatch $ tail args
         _       -> fail "Unknown command"
 
     return 0
