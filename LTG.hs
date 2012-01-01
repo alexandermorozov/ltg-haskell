@@ -59,8 +59,9 @@ instance Show Card where
 instance Show Field where
     show (Value v) = show v
     show (Function c []) = cardName c
-    show (Function c args) = (cardName c) ++
-                "(" ++ (intercalate ", " $ map show args) ++ ")"
+    show (Function c args) = concat $ cardName c :
+            (map (\x -> "(" ++ (show x) ++ ")") args)
+                --"(" ++ (intercalate ", " $ map show args) ++ ")"
 
 
 

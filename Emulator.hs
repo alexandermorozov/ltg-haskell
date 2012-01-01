@@ -8,7 +8,6 @@ import LTG
 
 oneStep :: Handle -> Maybe Handle -> LTG -> IO LTG
 oneStep hIn mOut ltg = do
-    putStrLn $ "###### turn " ++ show(ltgTurn ltg)
     putStrLn $ "*** player " ++ show(ltgPlayer ltg) ++ "'s turn, with slots:"
     printHBoard Prop ltg
     putStrLn "(slots {10000,I} are omitted)"
@@ -19,37 +18,38 @@ oneStep hIn mOut ltg = do
             LeftApp -> liftM2 (,) getCard getSlot
             RightApp -> liftM swap $ liftM2 (,) getSlot getCard
 
-    putStrLn $ case order of
-        LeftApp ->  "player 0 applied card " ++ (show card) ++ " to slot " ++ (show slot)
-        RightApp -> "player 0 applied slot " ++ (show slot) ++ " to card " ++ (show card)
+    putStrLn $ showChoice (ltgPlayer ltg) order card slot
 
     case mOut of
-        Just h -> (hPutStr h $ prepareOutput order card slot) >> hFlush h
+        Just h -> (hPutStr h $ showChoice4Bot order card slot) >> hFlush h
 
-    let ltg' = (flip execState) ltg $ applyCard order slot card
-    return ltg'
+    return $ (flip execState) ltg $ applyCard order slot card
 
-  where parseOrder orderL =
-            case read orderL of
-                1 -> LeftApp
-                2 -> RightApp
-        getOrder = putStrLn "(1) apply card to slot, or (2) apply slot to card?" >>
-                       liftM parseOrder (hGetLine hIn)
+  where getOrder = do
+            putStrLn "(1) apply card to slot, or (2) apply slot to card?"
+            liftM (intToOrder . read) (hGetLine hIn)
         getCard = putStrLn "card name?" >> liftM cLookup (hGetLine hIn)
         getSlot = putStrLn "slot no?" >> liftM read (hGetLine hIn)
 
-        prepareOutput order card slot =
+        onOrder order a b = case order of LeftApp -> a; RightApp -> b
+
+        showChoice pn order card slot =
+            let p1 = ["player ", show(pn), " applied "]
+                x  = onOrder order id swap ("card " ++ show card, "slot " ++ show slot)
+            in concat $ p1 ++ [fst x, " to ", snd x]
+
+        showChoice4Bot order card slot =
             let p1 = show $ orderToInt order
-                p2 = case order of
-                        LeftApp  -> [show card, show slot]
-                        RightApp -> [show slot, show card]
+                p2 = onOrder order id reverse $ [show card, show slot]
             in concat $ map (++"\n") (p1:p2)
+
+printTurn ltg = putStrLn $ "###### turn " ++ show(ltgTurn ltg)
 
 orderToInt o = case o of LeftApp -> 1 ; RightApp -> 2
 intToOrder i = case i of 1 -> LeftApp ; 2 -> RightApp
 
 simpleStep :: LTG -> IO LTG
-simpleStep = oneStep stdin Nothing
+simpleStep ltg = printTurn ltg >> oneStep stdin Nothing ltg
 
 runOnly :: IO LTG
 runOnly = do
@@ -74,10 +74,11 @@ runMatch [prog0, prog1] = do
 
         helper :: Handle -> Handle -> Handle -> Handle -> LTG -> IO LTG
         helper in0 out0 in1 out1 ltg = do
+            printTurn ltg
             ltg1 <- oneStep out0 (Just in1) ltg
             ltg2 <- oneStep out1 (Just in0) (swapPlayers ltg1)
             case ltgTurn ltg2 of
-                100000 -> return ltg2
+                20000 -> return ltg2
                 _      -> helper in0 out0 in1 out1 . incrementTurn . swapPlayers $ ltg2
 
         --printActions h order card slot = do
