@@ -98,11 +98,13 @@ cS = Card "S" 3 $ \[f,g,x] -> do
 cK = Card "K" 2 $ \[x,y] -> return x
 
 cInc = Card "inc" 1 $ \[i] -> do
-          toSlotNumber i >>= modifyHealth Prop 1
+          i' <- toSlotNumber i
+          modifyHealth Prop i' 1
           returnI
 
 cDec = Card "dec" 1 $ \[i] -> do
-          toSlotNumber i >>= modifyHealth Opp (-1)
+          i' <- toSlotNumber i
+          modifyHealth Opp i' (-1)
           returnI
 
 cAttack = Card "attack" 3 $ \[i,j,n] -> do
@@ -183,8 +185,8 @@ getHealth p i = do
     (Slot h _) <- getSlot p i
     return h
 
-modifyHealth :: Player -> Health -> SlotIdx -> State LTG ()
-modifyHealth p dh i = do
+modifyHealth :: Player -> SlotIdx -> Health -> State LTG ()
+modifyHealth p i dh = do
     s@(Slot h _) <- getSlot p i
     let newH = min 65535 $ max 0 $ h + dh
     when (isAlive s) $ putSlot p i s {sHealth = newH}
@@ -197,7 +199,7 @@ returnI = return $ Function cI []
 apply :: Field -> Field -> State LTG Field
 apply a b =
     case a of
-        Value i -> fail "Not a function"
+        Value _ -> fail "Not a function"
         Function cA argsA ->
             case cardN cA - length argsA of
                 0 -> fail "Too many arguments"
@@ -268,12 +270,4 @@ printHBoard p ltg = do
         hasChanged _ = True
 
         format (i, Slot h f) = printf "%d={%d,%s}" i h (show f)
-
-
-printLTG :: LTG -> IO ()
-printLTG ltg = do
-    putStrLn "ltgProp:"
-    printHBoard Prop ltg
-    putStrLn "ltgOpp:"
-    printHBoard Opp ltg
 

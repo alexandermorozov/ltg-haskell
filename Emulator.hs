@@ -78,7 +78,7 @@ runMatch [prog0, prog1] = do
             ltg1 <- oneStep out0 (Just in1) ltg
             ltg2 <- oneStep out1 (Just in0) (swapPlayers ltg1)
             case ltgTurn ltg2 of
-                20000 -> return ltg2
+                100000 -> return ltg2
                 _      -> helper in0 out0 in1 out1 . incrementTurn . swapPlayers $ ltg2
 
         --printActions h order card slot = do
