@@ -28,11 +28,12 @@ import Data.Array.Diff
 import Text.Printf
 import Data.List (intercalate)
 import Control.Monad.State
+import Control.Monad.Error
 import Debug.Trace
 
 data    Card   = Card { cardName :: String
                       , cardN :: Int
-                      , cardF :: ([Field] -> State LTG Field)
+                      , cardF :: ([Field] -> LTGRun Field)
                       }
 
 data    Field  = Value Int | Function Card [Field]
@@ -49,6 +50,8 @@ data LTG      = LTG { ltgOpp :: HBoard
                     , ltgTurn :: Int
                     , ltgPlayer :: Int -- 0 or 1
                     }
+
+type LTGRun = ErrorT String (State LTG)
 
 instance Eq Card where
     c == c' = cardName c == cardName c'
@@ -156,36 +159,36 @@ cLookup name = head $ filter match allCards
 
 ------------------------------------------------------- Card support functions
 
-getSlot :: Player -> SlotIdx -> State LTG Slot
+getSlot :: Player -> SlotIdx -> LTGRun Slot
 getSlot p i = do
     let selector = if (p == Prop) then ltgProp else ltgOpp
     ltg <- get
     return $ (selector ltg) ! i
 
 
-putSlot :: Player -> SlotIdx -> Slot -> State LTG ()
+putSlot :: Player -> SlotIdx -> Slot -> LTGRun ()
 putSlot p i s = do
     ltg <- get
     put $ if (p == Prop)
         then ltg {ltgProp = (ltgProp ltg) // [(i, s)]}
         else ltg {ltgOpp  = (ltgOpp  ltg) // [(i, s)]}
 
-putField :: Player -> SlotIdx -> Field -> State LTG ()
+putField :: Player -> SlotIdx -> Field -> LTGRun ()
 putField p i f = do
     s <- getSlot p i
     putSlot p i s {sField = f}
 
-getField :: Player -> SlotIdx -> State LTG Field
+getField :: Player -> SlotIdx -> LTGRun Field
 getField p i = do
     (Slot _ f) <- getSlot p i
     return f
 
-getHealth :: Player -> SlotIdx -> State LTG Int
+getHealth :: Player -> SlotIdx -> LTGRun Int
 getHealth p i = do
     (Slot h _) <- getSlot p i
     return h
 
-modifyHealth :: Player -> SlotIdx -> Health -> State LTG ()
+modifyHealth :: Player -> SlotIdx -> Health -> LTGRun ()
 modifyHealth p i dh = do
     s@(Slot h _) <- getSlot p i
     let newH = min 65535 $ max 0 $ h + dh
@@ -196,7 +199,7 @@ isAlive s = sHealth s > 0
 
 returnI = return $ Function cI []
 
-apply :: Field -> Field -> State LTG Field
+apply :: Field -> Field -> LTGRun Field
 apply a b =
     case a of
         Value _ -> fail "Not a function"
@@ -206,7 +209,7 @@ apply a b =
                 1 -> incAppCounter >> (cardF cA) (argsA ++ [b])
                 _ -> return $ Function cA $ argsA ++ [b]
 
-toInt :: Field -> State LTG Int
+toInt :: Field -> LTGRun Int
 toInt f =
     case f of
         Value x -> return x
@@ -216,7 +219,7 @@ toInt f =
             f' <- (cardF c) args
             toInt f'
 
-toSlotNumber :: Field -> State LTG SlotIdx
+toSlotNumber :: Field -> LTGRun SlotIdx
 toSlotNumber f = do
     i <- toInt f
     when (i > 255 || i < 0) $ fail "Invalid slot number"
@@ -225,19 +228,19 @@ toSlotNumber f = do
 
 ------------------------------------------------------- Game functions
 
-incAppCounter :: State LTG ()
+incAppCounter :: LTGRun ()
 incAppCounter = do
     ltg@(LTG _ _ n _ _) <- get
-    when (n == 1000) $ fail "Recursion depth exceeded"
+    when (n == 1000) $ fail "Native.AppLimitExceeded"
     put $ ltg {ltgAppN = n + 1}
 
-resetAppCounter :: State LTG ()
+resetAppCounter :: LTGRun ()
 resetAppCounter = do
     ltg <- get
     put $ ltg {ltgAppN = 0}
 
 
-applyCard :: AppOrder -> SlotIdx -> Card ->  State LTG ()
+applyCard :: AppOrder -> SlotIdx -> Card ->  LTGRun ()
 applyCard order i c = do
     resetAppCounter
     Slot h f <- getSlot Prop i
