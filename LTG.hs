@@ -214,7 +214,7 @@ apply a b =
         Value _ -> fail "Not a function"
         Function cA argsA ->
             case cardN cA - length argsA of
-                0 -> fail "Too many arguments"
+                0 -> fail "Native.Error" -- "Too many arguments"
                 1 -> incAppCounter >> (cardF cA) (argsA ++ [b])
                 _ -> return $ Function cA $ argsA ++ [b]
 
@@ -223,7 +223,8 @@ toInt f =
     case f of
         Value x -> return x
         Function c args -> do
-            when (cardN c /= length args) $ fail "Cannot convert incomple f to int"
+            when (cardN c /= length args) $ fail "Native.Error"
+                        --"Cannot convert incomple f to int"
             f' <- (cardF c) args
             toInt f'
 
