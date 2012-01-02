@@ -139,10 +139,10 @@ cCopy = Card "copy" 1 $ \[i] -> do
 cRevive = Card "revive" 1 $ \[i] -> do
           i' <- toSlotNumber i
           ph <- getHealth Prop i'
-          when (ph <= 0) $ modifyHealth Prop i' (1 - ph)
+          when (ph <= 0) $ putHealth Prop i' 1
           returnI
 
-cZombie = Card "zombie" 1 $ \[i,x] -> do
+cZombie = Card "zombie" 2 $ \[i,x] -> do
           i' <- toSlotNumber i
           oh <- getHealth Opp (255-i')
           unless (oh <= 0) $ fail "Slot is alive"
@@ -188,6 +188,11 @@ getHealth p i = do
     (Slot h _) <- getSlot p i
     return h
 
+putHealth :: Player -> SlotIdx -> Health -> LTGRun ()
+putHealth p i h = do
+    s <- getSlot p i
+    putSlot p i s {sHealth = h}
+
 modifyHealth :: Player -> SlotIdx -> Health -> LTGRun ()
 modifyHealth p i dh = do
     s@(Slot h _) <- getSlot p i
@@ -215,7 +220,6 @@ toInt f =
         Value x -> return x
         Function c args -> do
             when (cardN c /= length args) $ fail "Cannot convert incomple f to int"
-            incAppCounter
             f' <- (cardF c) args
             toInt f'
 
@@ -250,7 +254,7 @@ applyCard order i c ltg =
     where mainApp = do
             resetAppCounter
             Slot h f <- getSlot Prop i
-            when (h <= 0) $ fail "Slot is dead"
+            when (h <= 0) $ fail "Native.Error"
             f' <- case order of
                     LeftApp  -> apply (Function c []) f
                     RightApp -> apply f (Function c [])
