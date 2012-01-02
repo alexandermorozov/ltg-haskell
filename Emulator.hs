@@ -14,6 +14,9 @@ oneStep hIn mOut ltg = do
     printHBoard Prop ltg
     putStrLn "(slots {10000,I} are omitted)"
 
+    let (ltg', msgs') = zombieScan ltg
+    mapM_ putStrLn msgs'
+
     order <- getOrder
     -- xx: too complex? any simpler way?
     (card, slot) <- case order of
@@ -25,9 +28,10 @@ oneStep hIn mOut ltg = do
     case mOut of
         Just h -> (hPutStr h $ showChoice4Bot order card slot) >> hFlush h
 
-    let (ltg', err) = applyCard order slot card ltg
-    when (isJust err) $ putStrLn $ "Exception: " ++ fromJust err
-    return ltg'
+    let (ltg'', msgs'') = applyCard order slot card ltg'
+    mapM_ putStrLn msgs''
+    --when (isJust err) $ putStrLn $ "Exception: " ++ fromJust err
+    return ltg''
 
   where getOrder = do
             putStrLn "(1) apply card to slot, or (2) apply slot to card?"

@@ -11,18 +11,8 @@ module LTG
     , swapPlayers
     , incrementTurn
     , printHBoard
+    , zombieScan
     ) where
-
-{-
-TODO:
-   * custom monad. As far as I understand, there is no way to combine State
-        monad with another transformer to get desired termination rules.
-   * zombie mode / scan
-
-Not sure:
-   * It could be nice to split this module, but then I'll have to export too
-        much functions.
--}
 
 import Data.Array.Diff
 import Text.Printf
@@ -89,7 +79,7 @@ cGet = Card "get" 1 $ \[i] -> do
           s@(Slot _ f) <- getSlot Prop i'
           if isAlive s
               then return f
-              else fail "Slot is dead"
+              else fail "Native.Error"
 
 cPut = Card "put" 1 $ \[_] -> returnI
 
@@ -244,13 +234,13 @@ resetAppCounter = do
     put $ ltg {ltgAppN = 0}
 
 
-applyCard :: AppOrder -> SlotIdx -> Card ->  LTG -> (LTG, Maybe String)
+applyCard :: AppOrder -> SlotIdx -> Card ->  LTG -> (LTG, [String])
 applyCard order i c ltg =
     let (err, ltg') = runState (runErrorT mainApp) ltg
     in case err of
-        Right _ -> (ltg', Nothing)
-        Left e  -> let (_, ltg'') = runState (runErrorT resetSlot) ltg'
-                   in (ltg'', Just $ e ++ "\nslot " ++ show i ++ " reset to I")
+        Right _ -> (ltg', [])
+        Left e  -> (resetField i ltg',
+                        ["Exception: " ++e, "slot " ++ show i ++ " reset to I"])
     where mainApp = do
             resetAppCounter
             Slot h f <- getSlot Prop i
@@ -260,10 +250,22 @@ applyCard order i c ltg =
                     RightApp -> apply f (Function c [])
             putField Prop i f'
 
-          resetSlot = returnI >>= putField Prop i
+resetField :: SlotIdx -> LTG -> LTG
+resetField i = snd . runState (runErrorT $ returnI >>= putField Prop i)
 
 
-
+-- scans only proponent field
+zombieScan :: LTG -> (LTG, [String])
+zombieScan ltg = helper ltg [] 0
+    where helper ltg msgs 256 = (ltg, msgs)
+          helper ltg msgs i =
+            let s = ltgProp ltg ! i
+            in if sHealth s /= -1
+                   then helper ltg msgs (i+1)
+                   else let msg = "applying zombie slot 1={-1," ++
+                                    (show $ sField s) ++ "} to I"
+                            (ltg', msgs') = applyCard RightApp i cI ltg
+                        in helper ltg' (msgs ++ [msg] ++ msgs') (i+1)
 
 swapPlayers :: LTG -> LTG
 swapPlayers ltg =
