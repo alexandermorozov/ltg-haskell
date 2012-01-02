@@ -1,0 +1,21 @@
+ICFP 2011 programming contest solution.
+http://www.icfpcontest.org/2011/06/task-description-contest-starts-now.html
+
+Done:
+- LTG simulator without exception support, with some level of IO compatibility
+   with official one.
+
+TODO:
+- Exception support in simulator
+- Robots with simple strategies
+
+Maybe TODO:
+- Match server
+- Advanced strategies selectable at runtime
+- Lambda expression translator
+
+
+My actual goal is to learn Haskell, and LTG seems to be a good problem for
+this. Quality of code might be a bit low, since it's my first non-trivial
+Haskell program )
+
