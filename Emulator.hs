@@ -23,7 +23,7 @@ oneStep hIn mOut ltg = do
             LeftApp -> liftM2 (,) getCard getSlot
             RightApp -> liftM swap $ liftM2 (,) getSlot getCard
 
-    putStrLn $ showChoice (ltgPlayer ltg) order card slot
+    putStrLn $ showChoice (ltgPlayer ltg') order card slot
 
     case mOut of
         Just h -> (hPutStr h $ showChoice4Bot order card slot) >> hFlush h

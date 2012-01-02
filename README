@@ -5,10 +5,11 @@ Done:
 - LTG simulator, with some level of IO compatibility with official one.
 
 TODO:
-- Zombie handling
+- Check for end of match after each turn, display winner
 - Robots with simple strategies
 
 Maybe TODO:
+- Silent mode (-silent True)
 - Match server
 - Advanced strategies selectable at runtime
 - Lambda expression translator

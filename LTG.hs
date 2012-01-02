@@ -39,6 +39,7 @@ data LTG      = LTG { ltgOpp :: HBoard
                     , ltgAppN :: Int -- xx: not sure if it should be here
                     , ltgTurn :: Int
                     , ltgPlayer :: Int -- 0 or 1
+                    , ltgZombieMode :: Bool
                     }
 
 type LTGRun a = ErrorT String (State LTG) a
@@ -92,23 +93,23 @@ cK = Card "K" 2 $ \[x,y] -> return x
 
 cInc = Card "inc" 1 $ \[i] -> do
           i' <- toSlotNumber i
-          modifyHealth Prop i' 1
+          zombieInversion 1 >>= modifyHealth Prop i'
           returnI
 
 cDec = Card "dec" 1 $ \[i] -> do
           i' <- toSlotNumber i
-          modifyHealth Opp i' (-1)
+          zombieInversion (-1) >>= modifyHealth Opp i'
           returnI
 
 cAttack = Card "attack" 3 $ \[i,j,n] -> do
           i' <- toSlotNumber i
           n' <- toInt n
           ph <- getHealth Prop i'
-          when (n' > ph) $ fail "Not enough vitality"
+          unlessZMode $ when (n' > ph) $ fail "Not enough vitality"
           modifyHealth Prop i' (-n')
 
           j' <- toSlotNumber j
-          modifyHealth Opp (255-j') $ -n'*9 `quot` 10
+          zombieInversion (-n'*9 `quot` 10) >>= modifyHealth Opp (255-j')
           returnI
 
 cHelp = Card "help" 3 $ \[i,j,n] -> do
@@ -119,7 +120,7 @@ cHelp = Card "help" 3 $ \[i,j,n] -> do
           modifyHealth Prop i' (-n')
 
           j' <- toSlotNumber j
-          modifyHealth Prop j' $ n'*11 `quot` 10
+          zombieInversion (n'*11 `quot` 10) >>= modifyHealth Prop j'
           returnI
 
 cCopy = Card "copy" 1 $ \[i] -> do
@@ -186,8 +187,21 @@ putHealth p i h = do
 modifyHealth :: Player -> SlotIdx -> Health -> LTGRun ()
 modifyHealth p i dh = do
     s@(Slot h _) <- getSlot p i
+    zmode <- liftM ltgZombieMode get
     let newH = min 65535 $ max 0 $ h + dh
     when (isAlive s) $ putSlot p i s {sHealth = newH}
+
+unlessZMode :: LTGRun () -> LTGRun ()
+unlessZMode ma = do
+    zmode <- liftM ltgZombieMode get
+    if zmode
+        then return ()
+        else ma
+
+zombieInversion :: Int -> LTGRun Int
+zombieInversion x = do
+    zmode <- liftM ltgZombieMode get
+    return (if zmode; then (-x); else x)
 
 isAlive :: Slot -> Bool
 isAlive s = sHealth s > 0
@@ -224,7 +238,7 @@ toSlotNumber f = do
 
 incAppCounter :: LTGRun ()
 incAppCounter = do
-    ltg@(LTG _ _ n _ _) <- get
+    ltg@(LTG _ _ n _ _ _) <- get
     when (n == 1000) $ fail "Native.AppLimitExceeded"
     put $ ltg {ltgAppN = n + 1}
 
@@ -244,7 +258,7 @@ applyCard order i c ltg =
     where mainApp = do
             resetAppCounter
             Slot h f <- getSlot Prop i
-            when (h <= 0) $ fail "Native.Error"
+            unlessZMode $ when (h <= 0) $ fail "Native.Error"
             f' <- case order of
                     LeftApp  -> apply (Function c []) f
                     RightApp -> apply f (Function c [])
@@ -253,10 +267,14 @@ applyCard order i c ltg =
 resetField :: SlotIdx -> LTG -> LTG
 resetField i = snd . runState (runErrorT $ returnI >>= putField Prop i)
 
+zeroHealth :: SlotIdx -> LTG -> LTG
+zeroHealth i = snd . runState (runErrorT $ putHealth Prop i 0)
+
 
 -- scans only proponent field
 zombieScan :: LTG -> (LTG, [String])
-zombieScan ltg = helper ltg [] 0
+zombieScan ltg = let (ltg', msgs) = helper (ltg {ltgZombieMode=True}) [] 0
+                 in (ltg' {ltgZombieMode=False}, msgs)
     where helper ltg msgs 256 = (ltg, msgs)
           helper ltg msgs i =
             let s = ltgProp ltg ! i
@@ -265,14 +283,16 @@ zombieScan ltg = helper ltg [] 0
                    else let msg = "applying zombie slot 1={-1," ++
                                     (show $ sField s) ++ "} to I"
                             (ltg', msgs') = applyCard RightApp i cI ltg
-                        in helper ltg' (msgs ++ [msg] ++ msgs') (i+1)
+                            ltg'' = resetField i $ zeroHealth i ltg'
+                            -- TODO: reset
+                        in helper ltg'' (msgs ++ [msg] ++ msgs') (i+1)
 
 swapPlayers :: LTG -> LTG
 swapPlayers ltg =
     ltg {ltgProp = ltgOpp ltg, ltgOpp = ltgProp ltg, ltgPlayer = 1 - ltgPlayer ltg}
 
 defaultHBoard = listArray (0, 255) (repeat $ Slot 10000 (Function cI []))
-defaultLTG = LTG defaultHBoard defaultHBoard 0 1 0
+defaultLTG = LTG defaultHBoard defaultHBoard 0 1 0 False
 
 incrementTurn :: LTG -> LTG
 incrementTurn ltg = ltg {ltgTurn = 1 + ltgTurn ltg}
