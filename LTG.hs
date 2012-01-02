@@ -51,7 +51,7 @@ data LTG      = LTG { ltgOpp :: HBoard
                     , ltgPlayer :: Int -- 0 or 1
                     }
 
-type LTGRun = ErrorT String (State LTG)
+type LTGRun a = ErrorT String (State LTG) a
 
 instance Eq Card where
     c == c' = cardName c == cardName c'
@@ -214,7 +214,7 @@ toInt f =
     case f of
         Value x -> return x
         Function c args -> do
-            when (cardN c /= length args) $ fail "Cannot coerce to integer"
+            when (cardN c /= length args) $ fail "Cannot convert incomple f to int"
             incAppCounter
             f' <- (cardF c) args
             toInt f'
@@ -240,15 +240,23 @@ resetAppCounter = do
     put $ ltg {ltgAppN = 0}
 
 
-applyCard :: AppOrder -> SlotIdx -> Card ->  LTGRun ()
-applyCard order i c = do
-    resetAppCounter
-    Slot h f <- getSlot Prop i
-    when (h <= 0) $ fail "Slot is dead"
-    f' <- case order of
-            LeftApp  -> apply (Function c []) f
-            RightApp -> apply f (Function c [])
-    putField Prop i f'
+applyCard :: AppOrder -> SlotIdx -> Card ->  LTG -> (LTG, Maybe String)
+applyCard order i c ltg =
+    let (err, ltg') = runState (runErrorT mainApp) ltg
+    in case err of
+        Right _ -> (ltg', Nothing)
+        Left e  -> let (_, ltg'') = runState (runErrorT resetSlot) ltg'
+                   in (ltg'', Just $ e ++ "\nslot " ++ show i ++ " reset to I")
+    where mainApp = do
+            resetAppCounter
+            Slot h f <- getSlot Prop i
+            when (h <= 0) $ fail "Slot is dead"
+            f' <- case order of
+                    LeftApp  -> apply (Function c []) f
+                    RightApp -> apply f (Function c [])
+            putField Prop i f'
+
+          resetSlot = returnI >>= putField Prop i
 
 
 

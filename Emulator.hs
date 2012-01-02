@@ -4,6 +4,7 @@ import System.Process
 import Control.Monad.State
 import Control.Monad.Error
 import Data.Tuple (swap)
+import Data.Maybe
 
 import LTG
 
@@ -24,10 +25,8 @@ oneStep hIn mOut ltg = do
     case mOut of
         Just h -> (hPutStr h $ showChoice4Bot order card slot) >> hFlush h
 
-    let (err, ltg') = runState (runErrorT $ applyCard order slot card) ltg
-    case err of
-        Left e -> putStrLn $ "Exception: " ++ e
-        _ -> return ()
+    let (ltg', err) = applyCard order slot card ltg
+    when (isJust err) $ putStrLn $ "Exception: " ++ fromJust err
     return ltg'
 
   where getOrder = do
