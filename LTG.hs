@@ -26,6 +26,7 @@ import Data.List (intercalate)
 import Control.Monad.State
 import Control.Monad.Error
 import Debug.Trace
+import Data.List
 
 data    Card   = Card { cardName :: String
                       , cardN :: Int
@@ -57,12 +58,10 @@ instance Show Card where
     show c = cardName c
 
 instance Show Field where
-    show (Value v) = show v
-    show (Function c []) = cardName c
-    show (Function c args) = concat $ cardName c :
-            (map (\x -> "(" ++ (show x) ++ ")") args)
-                --"(" ++ (intercalate ", " $ map show args) ++ ")"
-
+    showsPrec _ (Value v) = shows v
+    showsPrec _ (Function c []) = shows $ cardName c
+    showsPrec _ (Function c args) = (foldl' (.) (shows $ cardName c)
+                    (map (\x -> ('(':) . (shows x) . (')':)) args))
 
 
 ------------------------------------------------------- Cards
