@@ -322,5 +322,5 @@ printHBoard p ltg = do
         hasChanged (_, Slot 10000 (Function c [])) = c /= cI
         hasChanged _ = True
 
-        format (i, Slot h f) = printf "%d={%d,%s}" i h (show f)
+        format (i, Slot h f) = show i ++ "={" ++ show h ++ "," ++ show f ++ "}"
 
