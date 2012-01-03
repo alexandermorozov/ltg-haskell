@@ -12,8 +12,14 @@ module LTG
     , incrementTurn
     , printHBoard
     , zombieScan
+    , countAlive
     ) where
 
+{- TODO:
+ * fix chaos: some function are supposed to run inside monad, others
+     are executed without. Functionality significantly overlaps,
+     sometimes it's difficult to tell which is which...
+-}
 import Data.Array.Diff
 import Text.Printf
 import Data.List (intercalate)
@@ -287,6 +293,15 @@ zombieScan ltg = let (ltg', msgs) = helper (ltg {ltgZombieMode=True}) [] 0
                             ltg'' = resetField i $ zeroHealth i ltg'
                             -- TODO: reset
                         in helper ltg'' (msgs ++ [msg] ++ msgs') (i+1)
+
+countAlive :: LTG -> (Int, Int) -- player0, player1
+countAlive ltg =
+    let aprop = count $ ltgProp ltg
+        aopp  = count $ ltgOpp  ltg
+    in if ltgPlayer ltg == 0
+           then (aprop, aopp)
+           else (aopp, aprop)
+    where count hb = length $ filter (\s -> sHealth s > 0) (elems hb)
 
 swapPlayers :: LTG -> LTG
 swapPlayers ltg =
