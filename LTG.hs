@@ -20,7 +20,7 @@ module LTG
      are executed without. Functionality significantly overlaps,
      sometimes it's difficult to tell which is which...
 -}
-import Data.Array.Diff
+import Data.Array
 import Text.Printf
 import Data.List (intercalate)
 import Control.Monad.State
@@ -37,7 +37,7 @@ data    Field  = Value Int | Function Card [Field]
 type Health   = Int
 type SlotIdx  = Int
 data Slot     = Slot { sHealth :: Health, sField :: Field }
-type HBoard   = DiffArray SlotIdx Slot
+type HBoard   = Array SlotIdx Slot
 data AppOrder = LeftApp | RightApp
 data Player   = Opp | Prop deriving (Eq)
 data LTG      = LTG { ltgOpp :: HBoard
