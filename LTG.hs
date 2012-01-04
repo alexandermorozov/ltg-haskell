@@ -159,18 +159,10 @@ cLookup name = head $ filter match allCards
 ------------------------------------------------------- Card support functions
 
 getSlot :: Player -> SlotIdx -> LTGRun Slot
-getSlot p i = do
-    let selector = if (p == Prop) then ltgProp else ltgOpp
-    ltg <- get
-    return $ (selector ltg) ! i
-
+getSlot p i = liftM (getSlotRaw p i) get
 
 putSlot :: Player -> SlotIdx -> Slot -> LTGRun ()
-putSlot p i s = do
-    ltg <- get
-    put $ if (p == Prop)
-        then ltg {ltgProp = (ltgProp ltg) // [(i, s)]}
-        else ltg {ltgOpp  = (ltgOpp  ltg) // [(i, s)]}
+putSlot p i s = get >>= put . putSlotRaw p i s
 
 putField :: Player -> SlotIdx -> Field -> LTGRun ()
 putField p i f = do
