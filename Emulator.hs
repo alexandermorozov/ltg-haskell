@@ -14,7 +14,7 @@ import LTG
 
 runL :: WriterT [String] (State LTG) () -> StateT LTG IO ()
 runL ma = do
-    (msgs, ltg) = liftM (runState (execWriterT ma)) get
+    (msgs, ltg) <- liftM (runState (execWriterT ma)) get
     put ltg
     mapM_ (liftIO . putStrLn) msgs
 
