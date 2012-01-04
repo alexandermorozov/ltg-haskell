@@ -156,6 +156,7 @@ cLookup :: String -> Card
 cLookup name = head $ filter match allCards
     where match c = cardName c == name
 
+
 ------------------------------------------------------- Card support functions
 
 getSlot :: Player -> SlotIdx -> LTGRun Slot
@@ -264,6 +265,8 @@ defaultHBoard = listArray (0, 255) (repeat $ Slot 10000 (Function cI []))
 
 ------------------------------------------------------- Game functions
 
+defaultLTG = LTG defaultHBoard defaultHBoard 0 1 0 False
+
 applyCard :: AppOrder -> SlotIdx -> Card -> WriterT [String] (State LTG) ()
 applyCard order i c = do
     ltg <- get
@@ -303,32 +306,33 @@ zombieScan = do
           resetField i = get >>=
             put . transformSlotRaw Prop i (\s -> Slot 0 (Function cI []))
 
-countAlive :: LTG -> (Int, Int) -- player0, player1
-countAlive ltg =
+countAlive :: WriterT [String] (State LTG) (Int, Int) -- player0, player1
+countAlive = do
+    ltg <- get
     let aprop = count $ ltgProp ltg
-        aopp  = count $ ltgOpp  ltg
-    in if ltgPlayer ltg == 0
-           then (aprop, aopp)
-           else (aopp, aprop)
+    let aopp  = count $ ltgOpp  ltg
+    if ltgPlayer ltg == 0
+        then return (aprop, aopp)
+        else return (aopp, aprop)
     where count hb = length $ filter (\s -> sHealth s > 0) (elems hb)
 
-swapPlayers :: LTG -> LTG
-swapPlayers ltg =
-    ltg {ltgProp = ltgOpp ltg, ltgOpp = ltgProp ltg, ltgPlayer = 1 - ltgPlayer ltg}
+swapPlayers :: WriterT [String] (State LTG) ()
+swapPlayers = do
+    ltg <- get
+    put ltg {ltgProp = ltgOpp ltg, ltgOpp = ltgProp ltg, ltgPlayer = 1 - ltgPlayer ltg}
 
-defaultLTG = LTG defaultHBoard defaultHBoard 0 1 0 False
+incrementTurn :: WriterT [String] (State LTG) ()
+incrementTurn = get >>= put . \ltg -> ltg {ltgTurn = 1 + ltgTurn ltg}
 
-incrementTurn :: LTG -> LTG
-incrementTurn ltg = ltg {ltgTurn = 1 + ltgTurn ltg}
-
-printHBoard :: Player -> LTG -> IO ()
-printHBoard p ltg = do
+printHBoard :: Player -> WriterT [String] (State LTG) ()
+printHBoard p = do
+    ltg <- get
     let slots = if (p == Prop) then ltgProp ltg else ltgOpp ltg
     let changed = filter hasChanged (assocs slots)
-    mapM_ (putStrLn . format) changed
+    mapM_ (tell . format) changed
     where
         hasChanged (_, Slot 10000 (Function c [])) = c /= cI
         hasChanged _ = True
 
-        format (i, Slot h f) = show i ++ "={" ++ show h ++ "," ++ show f ++ "}"
+        format (i, Slot h f) = [show i ++ "={" ++ show h ++ "," ++ show f ++ "}"]
 
