@@ -9,8 +9,6 @@ import Data.Maybe
 
 import LTG
 
-{- TODO: too many ltg, ltg', ltg''. Maybe I need StateT, WriterT  or something?
--}
 
 runL :: WriterT [String] (State LTG) a -> StateT LTG IO a
 runL ma = do
@@ -42,7 +40,7 @@ oneStep hIn mOut = do
             liftIO . hPutStr h $ showChoice4Bot order card slot
             liftIO $ hFlush h
 
-    runL $ applyCard order slot card
+    runL $ applyCard order card slot
 
   where getOrder = do
             (liftIO . putStrLn) "(1) apply card to slot, or (2) apply slot to card?"

@@ -262,8 +262,8 @@ defaultHBoard = listArray (0, 255) (repeat $ Slot 10000 (Function cI []))
 
 defaultLTG = LTG defaultHBoard defaultHBoard 0 1 0 False
 
-applyCard :: AppOrder -> SlotIdx -> Card -> WriterT [String] (State LTG) ()
-applyCard order i c = do
+applyCard :: AppOrder -> Card -> SlotIdx -> WriterT [String] (State LTG) ()
+applyCard order c i = do
     ltg <- get
     let (err, ltg') =  runState (runErrorT mainApp) ltg {ltgAppN = 0}
     put ltg'
@@ -296,7 +296,7 @@ zombieScan = do
             s <- liftM (getSlotRaw Prop i) get
             when (sHealth s == -1) $ do
                 tell ["applying zombie slot 1={-1," ++ (show $ sField s) ++ "} to I"]
-                applyCard RightApp i cI
+                applyCard RightApp cI i
                 resetField i
           resetField i = get >>=
             put . transformSlotRaw Prop i (\s -> Slot 0 (Function cI []))
