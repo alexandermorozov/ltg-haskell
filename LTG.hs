@@ -15,11 +15,6 @@ module LTG
     , countAlive
     ) where
 
-{- TODO:
- * fix chaos: some function are supposed to run inside monad, others
-     are executed without. Functionality significantly overlaps,
-     sometimes it's difficult to tell which is which...
--}
 import Data.Array
 import Text.Printf
 import Data.List (intercalate)

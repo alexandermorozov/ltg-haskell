@@ -12,11 +12,12 @@ import LTG
 {- TODO: too many ltg, ltg', ltg''. Maybe I need StateT, WriterT  or something?
 -}
 
-runL :: WriterT [String] (State LTG) () -> StateT LTG IO ()
+runL :: WriterT [String] (State LTG) a -> StateT LTG IO a
 runL ma = do
-    (msgs, ltg) <- liftM (runState (execWriterT ma)) get
+    ((a, msgs), ltg) <- liftM (runState (runWriterT ma)) get
     put ltg
     mapM_ (liftIO . putStrLn) msgs
+    return a
 
 -- xx: fix evil liftIO
 oneStep :: Handle -> Maybe Handle -> StateT LTG IO ()
@@ -94,15 +95,38 @@ runMatch [prog0, prog1] = do
         cProc prog i = createProcess (proc prog [i]) {std_in = CreatePipe,
                                                       std_out = CreatePipe}
 
+        -- xx: remove staircasing. Cont? Either?
         helper :: Handle -> Handle -> Handle -> Handle -> StateT LTG IO LTG
         helper in0 out0 in1 out1 = do
             printTurn
             oneStep out0 (Just in1) ; runL swapPlayers
-            oneStep out1 (Just in0) ; runL swapPlayers
+            eMsg <- checkEnd
+            case eMsg of
+                Just m -> (liftIO . putStrLn) m >> get
+                Nothing -> do
+                    oneStep out1 (Just in0) ; runL swapPlayers
+                    eMsg <- checkEnd
+                    case eMsg of
+                        Just m -> (liftIO . putStrLn) m >> get
+                        Nothing -> runL incrementTurn >> helper in0 out0 in1 out1
+
+        checkEnd = do
+            (l0, l1) <- runL countAlive
             turn <- liftM ltgTurn get
-            case turn of
-                100000 -> get
-                _      -> runL incrementTurn >> helper in0 out0 in1 out1
+            playerI <- liftM ltgPlayer get
+            let msg = compose l0 l1 turn
+            if (l0 == 0 || l1 == 0)
+                then return (Just msg)
+                else if turn == 100000 && playerI == 1
+                    then return (Just msg)
+                    else return Nothing
+            where compose l0 l1 turn =
+                      let msg2 = " by " ++ show l0 ++ ":" ++ show l1 ++
+                                 " after turn " ++ show turn
+                      in case (l0 == l1, l0 > l1) of
+                          (True, _) -> "!! draw" ++ msg2
+                          (_, True) -> "!! player 0 wins" ++ msg2
+                          (_, _   ) -> "!! player 1 wins" ++ msg2
 
         --printActions h order card slot = do
 
