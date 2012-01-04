@@ -289,7 +289,7 @@ applyCard order i c = do
 zombieScan :: WriterT [String] (State LTG) ()
 zombieScan = do
     setZombieMode True
-    sequence $ map helper [0..255]
+    mapM_ helper [0..255]
     setZombieMode False
     where setZombieMode z = get >>= \l -> put $ l {ltgZombieMode = z}
           helper i = do
