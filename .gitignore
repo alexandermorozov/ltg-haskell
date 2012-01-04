@@ -1,7 +1,11 @@
 *.o
 *.hi
+*.hp
+*.prof
 .*
 
 Emulator
 Scratchpad
+Bot
 ltg.linux64
+
