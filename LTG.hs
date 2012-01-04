@@ -25,6 +25,7 @@ import Text.Printf
 import Data.List (intercalate)
 import Control.Monad.State
 import Control.Monad.Error
+import Control.Monad.Writer
 import Debug.Trace
 import Data.List
 
@@ -57,10 +58,12 @@ instance Eq Card where
 instance Show Card where
     show c = cardName c
 
-instance Show Field where
+-- xx: not sure at all if I got this right, need one more pass
+instance Show Field where 
+    show a = shows a ""
     showsPrec _ (Value v) = shows v
-    showsPrec _ (Function c []) = shows $ cardName c
-    showsPrec _ (Function c args) = (foldl' (.) (shows $ cardName c)
+    showsPrec _ (Function c []) = (++) (cardName c)
+    showsPrec _ (Function c args) = (foldl' (.) ((++) $ cardName c)
                     (map (\x -> ('(':) . (shows x) . (')':)) args))
 
 
@@ -239,30 +242,49 @@ toSlotNumber f = do
     when (i > 255 || i < 0) $ fail "Invalid slot number"
     return i
 
-
-------------------------------------------------------- Game functions
-
 incAppCounter :: LTGRun ()
 incAppCounter = do
     ltg@(LTG _ _ n _ _ _) <- get
     when (n == 1000) $ fail "Native.AppLimitExceeded"
     put $ ltg {ltgAppN = n + 1}
 
-resetAppCounter :: LTGRun ()
-resetAppCounter = do
+
+------------------------------------------------------- Low-level slot operations
+
+getSlotRaw :: Player -> SlotIdx -> LTG -> Slot
+getSlotRaw p i ltg =
+    let selector = if (p == Prop) then ltgProp else ltgOpp
+    in (selector ltg) ! i
+
+putSlotRaw :: Player -> SlotIdx -> Slot -> LTG -> LTG
+putSlotRaw p i s ltg =
+    if (p == Prop)
+        then ltg {ltgProp = (ltgProp ltg) // [(i, s)]}
+        else ltg {ltgOpp  = (ltgOpp  ltg) // [(i, s)]}
+
+transformSlotRaw :: Player -> SlotIdx -> (Slot -> Slot) -> LTG -> LTG
+transformSlotRaw p i f ltg =
+    let s = getSlotRaw Prop i ltg
+    in  putSlotRaw Prop i (f s) ltg
+
+defaultHBoard = listArray (0, 255) (repeat $ Slot 10000 (Function cI []))
+
+
+------------------------------------------------------- Game functions
+
+applyCard :: AppOrder -> SlotIdx -> Card -> WriterT [String] (State LTG) ()
+applyCard order i c = do
     ltg <- get
-    put $ ltg {ltgAppN = 0}
+    let (err, ltg') =  runState (runErrorT mainApp) ltg {ltgAppN = 0}
+    put ltg'
+    case err of
+        Right _ -> return ()
+        Left e  -> do
+            resetField
+            tell ["Exception: " ++ e]
+            tell ["slot " ++ show i ++ " reset to I"]
 
-
-applyCard :: AppOrder -> SlotIdx -> Card ->  LTG -> (LTG, [String])
-applyCard order i c ltg =
-    let (err, ltg') = runState (runErrorT mainApp) ltg
-    in case err of
-        Right _ -> (ltg', [])
-        Left e  -> (resetField i ltg',
-                        ["Exception: " ++e, "slot " ++ show i ++ " reset to I"])
     where mainApp = do
-            resetAppCounter
             Slot h f <- getSlot Prop i
             unlessZMode $ when (h <= 0) $ fail "Native.Error"
             f' <- case order of
@@ -270,28 +292,24 @@ applyCard order i c ltg =
                     RightApp -> apply f (Function c [])
             putField Prop i f'
 
-resetField :: SlotIdx -> LTG -> LTG
-resetField i = snd . runState (runErrorT $ returnI >>= putField Prop i)
+          resetField = get >>= 
+            put . transformSlotRaw Prop i (\s -> s {sField = Function cI []})
 
-zeroHealth :: SlotIdx -> LTG -> LTG
-zeroHealth i = snd . runState (runErrorT $ putHealth Prop i 0)
-
-
--- scans only proponent field
-zombieScan :: LTG -> (LTG, [String])
-zombieScan ltg = let (ltg', msgs) = helper (ltg {ltgZombieMode=True}) [] 0
-                 in (ltg' {ltgZombieMode=False}, msgs)
-    where helper ltg msgs 256 = (ltg, msgs)
-          helper ltg msgs i =
-            let s = ltgProp ltg ! i
-            in if sHealth s /= -1
-                   then helper ltg msgs (i+1)
-                   else let msg = "applying zombie slot 1={-1," ++
-                                    (show $ sField s) ++ "} to I"
-                            (ltg', msgs') = applyCard RightApp i cI ltg
-                            ltg'' = resetField i $ zeroHealth i ltg'
-                            -- TODO: reset
-                        in helper ltg'' (msgs ++ [msg] ++ msgs') (i+1)
+-- scans only proponent's field
+zombieScan :: WriterT [String] (State LTG) ()
+zombieScan = do
+    setZombieMode True
+    sequence $ map helper [0..255]
+    setZombieMode False
+    where setZombieMode z = get >>= \l -> put $ l {ltgZombieMode = z}
+          helper i = do
+            s <- liftM (getSlotRaw Prop i) get
+            when (sHealth s == -1) $ do
+                tell ["applying zombie slot 1={-1," ++ (show $ sField s) ++ "} to I"]
+                applyCard RightApp i cI
+                resetField i
+          resetField i = get >>=
+            put . transformSlotRaw Prop i (\s -> Slot 0 (Function cI []))
 
 countAlive :: LTG -> (Int, Int) -- player0, player1
 countAlive ltg =
@@ -306,7 +324,6 @@ swapPlayers :: LTG -> LTG
 swapPlayers ltg =
     ltg {ltgProp = ltgOpp ltg, ltgOpp = ltgProp ltg, ltgPlayer = 1 - ltgPlayer ltg}
 
-defaultHBoard = listArray (0, 255) (repeat $ Slot 10000 (Function cI []))
 defaultLTG = LTG defaultHBoard defaultHBoard 0 1 0 False
 
 incrementTurn :: LTG -> LTG

@@ -2,6 +2,7 @@ import IO
 import System.Environment (getArgs)
 import System.Process
 import Control.Monad.State
+import Control.Monad.Writer
 import Control.Monad.Error
 import Data.Tuple (swap)
 import Data.Maybe
@@ -17,7 +18,7 @@ oneStep hIn mOut ltg = do
     printHBoard Prop ltg
     putStrLn "(slots {10000,I} are omitted)"
 
-    let (ltg', msgs') = zombieScan ltg
+    let (msgs', ltg') = runState (execWriterT zombieScan) ltg
     mapM_ putStrLn msgs'
 
     order <- getOrder
@@ -31,7 +32,7 @@ oneStep hIn mOut ltg = do
     case mOut of
         Just h -> (hPutStr h $ showChoice4Bot order card slot) >> hFlush h
 
-    let (ltg'', msgs'') = applyCard order slot card ltg'
+    let (msgs'', ltg'') = runState (execWriterT $ applyCard order slot card) ltg'
     mapM_ putStrLn msgs''
     --when (isJust err) $ putStrLn $ "Exception: " ++ fromJust err
     return ltg''
@@ -90,7 +91,8 @@ runMatch [prog0, prog1] = do
             -- putStrLn $ show $ countAlive ltg1
             ltg2 <- oneStep out1 (Just in0) (swapPlayers ltg1)
             case ltgTurn ltg2 of
-                100000 -> return ltg2
+                2283 -> return ltg2
+                -- 100000 -> return ltg2
                 _      -> helper in0 out0 in1 out1 . incrementTurn . swapPlayers $ ltg2
 
         --printActions h order card slot = do
