@@ -54,12 +54,12 @@ runStrategy playerN strategy = do
           myTurn = do
               st@(o, c, i) <- liftM strategy get
               liftIO $ printStep st
-              runL $ applyCard o i c
+              runL $ applyCard o c i
 
           oppTurn = do
               (o, c, i) <- liftIO readStep
               runL swapPlayers
-              runL $ applyCard o i c
+              runL $ applyCard o c i
               runL swapPlayers
 
 main = do
