@@ -1,0 +1,18 @@
+Name:           LTG
+Version:        0.1
+Cabal-Version:  >= 1.2
+License:        BSD3
+Author:         Alexander Morozov
+Synopsis:       ICFP2011 contest solution
+Build-Type:     Simple
+
+Executable emulator
+  Main-Is:        Emulator.hs
+  Build-Depends:  base, mtl, array, process, haskell98
+  Extensions:     DoAndIfThenElse
+
+Executable bot
+  Main-Is:        Bot.hs
+  Build-Depends:  base, mtl, array, process, haskell98
+  Extensions:     DoAndIfThenElse
+
