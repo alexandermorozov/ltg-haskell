@@ -8,11 +8,13 @@ Build-Type:     Simple
 
 Executable emulator
   Main-Is:        Emulator.hs
+  Other-Modules:  LTG
   Build-Depends:  base, mtl, array, process, haskell98
   Extensions:     DoAndIfThenElse
 
 Executable bot
   Main-Is:        Bot.hs
+  Other-Modules:  LTG
   Build-Depends:  base, mtl, array, process, haskell98
   Extensions:     DoAndIfThenElse
 
