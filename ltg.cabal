@@ -6,13 +6,13 @@ Author:         Alexander Morozov
 Synopsis:       ICFP2011 contest solution
 Build-Type:     Simple
 
-Executable emulator
+Executable ltg-emulator
   Main-Is:        Emulator.hs
   Other-Modules:  LTG
   Build-Depends:  base, mtl, array, process, haskell98
   Extensions:     DoAndIfThenElse
 
-Executable bot
+Executable ltg-bot
   Main-Is:        Bot.hs
   Other-Modules:  LTG
   Build-Depends:  base, mtl, array, process, haskell98
