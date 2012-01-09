@@ -13,6 +13,8 @@ module LTG
     , printHBoard
     , zombieScan
     , countAlive
+    , cI, cZero, cSucc, cDbl, cPut, cS, cK, cInc, cDec, cAttack, cCopy
+    , cRevive, cZombie
     ) where
 
 import Data.Array
