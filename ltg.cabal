@@ -10,11 +10,11 @@ Executable ltg-emulator
   Main-Is:        Emulator.hs
   Other-Modules:  LTG
   Build-Depends:  base, mtl, array, process, haskell98
-  Extensions:     DoAndIfThenElse
+  Extensions:     DoAndIfThenElse, FlexibleContexts
 
 Executable ltg-bot
   Main-Is:        Bot.hs
   Other-Modules:  LTG
   Build-Depends:  base, mtl, array, process, haskell98
-  Extensions:     DoAndIfThenElse
+  Extensions:     DoAndIfThenElse, FlexibleContexts
 

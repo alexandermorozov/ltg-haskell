@@ -10,6 +10,7 @@ module LTG
     , applyCard
     , swapPlayers
     , incrementTurn
+    , getHealth
     , printHBoard
     , zombieScan
     , countAlive
@@ -156,7 +157,7 @@ cLookup name = head $ filter match allCards
 
 ------------------------------------------------------- Card support functions
 
-getSlot :: Player -> SlotIdx -> LTGRun Slot
+getSlot :: (Monad m, MonadState LTG m) => Player -> SlotIdx -> m Slot
 getSlot p i = liftM (getSlotRaw p i) get
 
 putSlot :: Player -> SlotIdx -> Slot -> LTGRun ()
@@ -167,12 +168,12 @@ putField p i f = do
     s <- getSlot p i
     putSlot p i s {sField = f}
 
-getField :: Player -> SlotIdx -> LTGRun Field
+getField :: (Monad m, MonadState LTG m) => Player -> SlotIdx -> m Field
 getField p i = do
     (Slot _ f) <- getSlot p i
     return f
 
-getHealth :: Player -> SlotIdx -> LTGRun Int
+getHealth :: (Monad m, MonadState LTG m) => Player -> SlotIdx -> m Int
 getHealth p i = do
     (Slot h _) <- getSlot p i
     return h

@@ -41,21 +41,33 @@ type Strategy a = StateT LTG (Cont Action) a
 
 
 strategy s ltg = runCont (runStateT s ltg) (\_ -> Done)
-start = step (LeftApp, cLookup "I", 0) -- first step is thrown out
+start = step (LeftApp, cI, 0) -- first step is thrown out
 step a = (lift $ cont $ \k -> DoStep a k) >>= put
 done   = lift $ cont $ \_ -> Done
 
 
 dummyStrategy :: Strategy Action
 dummyStrategy = do
-    forever $ step (LeftApp, cLookup "I", 1)
+    forever $ step (LeftApp, cI, 1)
     done
 
 decAttack :: Strategy Action
 decAttack = do
-    forever $ do
-        step (RightApp, cLookup "zero", 0)
-        step (LeftApp, cLookup "dec", 0)
+    mapM_ kill [0..255]
+    done
+    where kill i = do
+              step (RightApp, cZero, 0)
+              when (i > 0) $ mapM_ (\_ -> step (LeftApp, cSucc, 0)) [1..i]
+              step (LeftApp, cDec, 0)
+              h <- getHealth Opp (255-i)
+              when (h > 0) $ kill i
+              --done
+
+-- xx: draft
+naivePutNumber :: Int -> SlotIdx -> Strategy Action
+naivePutNumber n i = do
+    step (RightApp, cZero, i)
+    mapM_ (\_ -> step (RightApp, cI, i)) [1..n]
     done
 
 runStrategy :: Int -> Strategy Action -> IO ()
