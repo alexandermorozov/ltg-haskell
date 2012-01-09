@@ -97,13 +97,15 @@ runMatch [prog0, prog1] = do
         helper :: Handle -> Handle -> Handle -> Handle -> StateT LTG IO LTG
         helper in0 out0 in1 out1 = do
             printTurn
-            oneStep out0 (Just in1) ; runL swapPlayers
+            oneStep out0 (Just in1)
             eMsg <- checkEnd
+            runL swapPlayers
             case eMsg of
                 Just m -> (liftIO . putStrLn) m >> get
                 Nothing -> do
-                    oneStep out1 (Just in0) ; runL swapPlayers
+                    oneStep out1 (Just in0)
                     eMsg <- checkEnd
+                    runL swapPlayers
                     case eMsg of
                         Just m -> (liftIO . putStrLn) m >> get
                         Nothing -> runL incrementTurn >> helper in0 out0 in1 out1
