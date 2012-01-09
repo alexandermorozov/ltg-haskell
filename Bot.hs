@@ -1,6 +1,7 @@
 import Control.Monad
 import Control.Monad.State
 import Control.Monad.Writer
+import Control.Monad.Cont
 import Data.Tuple (swap)
 import IO
 import System.Environment (getArgs)
@@ -39,30 +40,50 @@ printStep (o, c, i) = do
     hFlush stdout
 
 
-type Strategy = LTG -> (AppOrder, Card, SlotIdx)
 
-dummyStrategy :: Strategy
-dummyStrategy ltg = (LeftApp, cLookup "I", 0)
+-- Ok, it's a coroutine in disguise, but I want to explicitly write one
+type Step = (AppOrder, Card, SlotIdx)
+data Action = Done | DoStep Step (LTG -> Action)
+type Strategy a = StateT LTG (Cont Action) a
 
 
-runStrategy :: Int -> Strategy -> StateT LTG IO ()
-runStrategy playerN strategy = do
-    forever $ case playerN of
-        0 -> myTurn >> oppTurn >> runL incrementTurn
-        1 -> oppTurn >> myTurn >> runL incrementTurn
-    where myTurn :: StateT LTG IO ()
-          myTurn = do
-              st@(o, c, i) <- liftM strategy get
-              liftIO $ printStep st
-              runL $ applyCard o c i
+strategy s ltg = runCont (runStateT s ltg) (\_ -> Done)
+start = step (LeftApp, cLookup "I", 0) -- first step is thrown out
+step a = lift $ cont $ \k -> DoStep a k
+done   = lift $ cont $ \_ -> Done
 
-          oppTurn = do
+
+dummyStrategy :: Strategy Action
+dummyStrategy = do
+    forever $ step (LeftApp, cLookup "I", 1)
+    done
+
+decAttack :: Strategy Action
+decAttack = do
+    forever $ do
+        step (RightApp, cLookup "zero", 0)
+        step (LeftApp, cLookup "dec", 0)
+    done
+
+runStrategy :: Int -> Strategy Action -> IO ()
+runStrategy playerN s =
+    let (DoStep _ a) = strategy (start >> s) defaultLTG
+    in case playerN of
+         0 -> myTurn a defaultLTG
+         1 -> oppTurn a defaultLTG
+    where myTurn k ltg = do
+              let (DoStep (o, c, i) k') = k ltg
+              printStep (o, c, i)
+              oppTurn k' $ run (applyCard o c i) ltg
+
+          oppTurn k ltg = do
               (o, c, i) <- liftIO readStep
-              runL swapPlayers
-              runL $ applyCard o c i
-              runL swapPlayers
+              myTurn k $ run (swapPlayers >> applyCard o c i >> swapPlayers) ltg
+
+          run ma ltg = snd $ runState (runWriterT ma) ltg
 
 main = do
     args <- getArgs
     let i = read $ head args :: Int
-    runStateT (runStrategy i dummyStrategy) defaultLTG
+    --runStrategy i dummyStrategy
+    runStrategy i decAttack
