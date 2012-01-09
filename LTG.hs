@@ -101,7 +101,7 @@ cInc = Card "inc" 1 $ \[i] -> do
 
 cDec = Card "dec" 1 $ \[i] -> do
           i' <- toSlotNumber i
-          zombieInversion (-1) >>= modifyHealth Opp i'
+          zombieInversion (-1) >>= modifyHealth Opp (255-i')
           returnI
 
 cAttack = Card "attack" 3 $ \[i,j,n] -> do
