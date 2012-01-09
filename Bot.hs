@@ -17,12 +17,6 @@ intToOrder i = case i of 1 -> LeftApp ; 2 -> RightApp
 
 swapOrder order = case order of LeftApp -> id ; RightApp -> swap
 
-runL :: WriterT [String] (State LTG) a -> StateT LTG IO a
-runL ma = do
-    ((a, _), ltg) <- liftM (runState (runWriterT ma)) get
-    put ltg
-    return a
-
 
 
 readStep :: IO (AppOrder, Card, SlotIdx)
@@ -41,7 +35,6 @@ printStep (o, c, i) = do
 
 
 
--- Ok, it's a coroutine in disguise, but I want to explicitly write one
 type Step = (AppOrder, Card, SlotIdx)
 data Action = Done | DoStep Step (LTG -> Action)
 type Strategy a = StateT LTG (Cont Action) a
@@ -49,7 +42,7 @@ type Strategy a = StateT LTG (Cont Action) a
 
 strategy s ltg = runCont (runStateT s ltg) (\_ -> Done)
 start = step (LeftApp, cLookup "I", 0) -- first step is thrown out
-step a = lift $ cont $ \k -> DoStep a k
+step a = (lift $ cont $ \k -> DoStep a k) >>= put
 done   = lift $ cont $ \_ -> Done
 
 
