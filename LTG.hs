@@ -5,6 +5,7 @@ module LTG
     , Card
     , SlotIdx
     , Player (..)
+    , maxSlotIdx
     , cLookup
     , defaultLTG
     , applyCard
@@ -65,6 +66,8 @@ instance Show Field where
                     (map (\x -> ('(':) . (shows x) . (')':)) args))
 
 
+maxSlotIdx = 255
+
 ------------------------------------------------------- Cards
 
 cI = Card "I" 1 $ \[x] ->
@@ -104,7 +107,7 @@ cInc = Card "inc" 1 $ \[i] -> do
 
 cDec = Card "dec" 1 $ \[i] -> do
           i' <- toSlotNumber i
-          zombieInversion (-1) >>= modifyHealth Opp (255-i')
+          zombieInversion (-1) >>= modifyHealth Opp (maxSlotIdx - i')
           returnI
 
 cAttack = Card "attack" 3 $ \[i,j,n] -> do
@@ -115,7 +118,7 @@ cAttack = Card "attack" 3 $ \[i,j,n] -> do
           modifyHealth Prop i' (-n')
 
           j' <- toSlotNumber j
-          zombieInversion (-n'*9 `quot` 10) >>= modifyHealth Opp (255-j')
+          zombieInversion (-n'*9 `quot` 10) >>= modifyHealth Opp (maxSlotIdx - j')
           returnI
 
 cHelp = Card "help" 3 $ \[i,j,n] -> do
@@ -141,9 +144,9 @@ cRevive = Card "revive" 1 $ \[i] -> do
 
 cZombie = Card "zombie" 2 $ \[i,x] -> do
           i' <- toSlotNumber i
-          oh <- getHealth Opp (255-i')
+          oh <- getHealth Opp (maxSlotIdx - i')
           unless (oh <= 0) $ fail "Slot is alive"
-          putSlot Opp (255-i') $ Slot (-1) x
+          putSlot Opp (maxSlotIdx - i') $ Slot (-1) x
           returnI
 
 allCards = [cI, cZero, cSucc, cDbl, cGet, cPut, cS, cK, cInc, cDec, cAttack,
@@ -230,7 +233,7 @@ toInt f =
 toSlotNumber :: Field -> LTGRun SlotIdx
 toSlotNumber f = do
     i <- toInt f
-    when (i > 255 || i < 0) $ fail "Invalid slot number"
+    when (i > maxSlotIdx || i < 0) $ fail "Invalid slot number"
     return i
 
 incAppCounter :: LTGRun ()
@@ -258,7 +261,7 @@ transformSlotRaw p i f ltg =
     let s = getSlotRaw Prop i ltg
     in  putSlotRaw Prop i (f s) ltg
 
-defaultHBoard = listArray (0, 255) (repeat $ Slot 10000 (Function cI []))
+defaultHBoard = listArray (0, maxSlotIdx) (repeat $ Slot 10000 (Function cI []))
 
 
 ------------------------------------------------------- Game functions
@@ -292,7 +295,7 @@ applyCard order c i = do
 zombieScan :: WriterT [String] (State LTG) ()
 zombieScan = do
     setZombieMode True
-    mapM_ helper [0..255]
+    mapM_ helper [0..maxSlotIdx]
     setZombieMode False
     where setZombieMode z = get >>= \l -> put $ l {ltgZombieMode = z}
           helper i = do

@@ -46,6 +46,7 @@ step a = (lift $ cont $ \k -> DoStep a k) >>= put
 done   = lift $ cont $ \_ -> Done
 
 
+
 dummyStrategy :: Strategy Action
 dummyStrategy = do
     forever $ step (LeftApp, cI, 1)
@@ -53,15 +54,15 @@ dummyStrategy = do
 
 decAttack :: Strategy Action
 decAttack = do
-    mapM_ kill [0..255]
+    mapM_ kill [0..maxSlotIdx]
     done
     where kill i = do
               step (RightApp, cZero, 0)
               when (i > 0) $ mapM_ (\_ -> step (LeftApp, cSucc, 0)) [1..i]
               step (LeftApp, cDec, 0)
-              h <- getHealth Opp (255-i)
+              h <- getHealth Opp (maxSlotIdx-i)
               when (h > 0) $ kill i
-              --done
+
 
 -- xx: draft
 naivePutNumber :: Int -> SlotIdx -> Strategy Action
@@ -70,6 +71,8 @@ naivePutNumber n i = do
     mapM_ (\_ -> step (RightApp, cI, i)) [1..n]
     done
 
+
+-- xx: zombie scan
 runStrategy :: Int -> Strategy Action -> IO ()
 runStrategy playerN s =
     let (DoStep _ a) = strategy (start >> s) defaultLTG
@@ -92,3 +95,4 @@ main = do
     let i = read $ head args :: Int
     --runStrategy i dummyStrategy
     runStrategy i decAttack
+
