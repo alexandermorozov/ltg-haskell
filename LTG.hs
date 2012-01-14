@@ -43,6 +43,8 @@ data AppOrder = LeftApp | RightApp
 data Player   = Opp | Prop deriving (Eq)
 data LTG      = LTG { ltgOpp :: HBoard
                     , ltgProp :: HBoard
+                    , ltgOppZombies :: [SlotIdx]
+                    , ltgPropZombies :: [SlotIdx]
                     , ltgAppN :: Int -- xx: not sure if it should be here
                     , ltgTurn :: Int
                     , ltgPlayer :: Int -- 0 or 1
@@ -147,6 +149,7 @@ cZombie = Card "zombie" 2 $ \[i,x] -> do
           oh <- getHealth Opp (maxSlotIdx - i')
           unless (oh <= 0) $ fail "Slot is alive"
           putSlot Opp (maxSlotIdx - i') $ Slot (-1) x
+          modify $ addZombie Opp (maxSlotIdx - i')
           returnI
 
 allCards = [cI, cZero, cSucc, cDbl, cGet, cPut, cS, cK, cInc, cDec, cAttack,
@@ -164,34 +167,28 @@ getSlot :: (Monad m, MonadState LTG m) => Player -> SlotIdx -> m Slot
 getSlot p i = liftM (getSlotRaw p i) get
 
 putSlot :: Player -> SlotIdx -> Slot -> LTGRun ()
-putSlot p i s = get >>= put . putSlotRaw p i s
+putSlot p i s = modify $ putSlotRaw p i s
+
+modifySlot :: Player -> SlotIdx -> (Slot -> Slot) -> LTGRun ()
+modifySlot p i fn = liftM fn (getSlot p i) >>= putSlot p i
 
 putField :: Player -> SlotIdx -> Field -> LTGRun ()
-putField p i f = do
-    s <- getSlot p i
-    putSlot p i s {sField = f}
+putField p i f = modifySlot p i $ \s -> s {sField = f}
 
 getField :: (Monad m, MonadState LTG m) => Player -> SlotIdx -> m Field
-getField p i = do
-    (Slot _ f) <- getSlot p i
-    return f
+getField p i = sField `liftM` getSlot p i
 
 getHealth :: (Monad m, MonadState LTG m) => Player -> SlotIdx -> m Int
-getHealth p i = do
-    (Slot h _) <- getSlot p i
-    return h
+getHealth p i = sHealth `liftM` getSlot p i
 
 putHealth :: Player -> SlotIdx -> Health -> LTGRun ()
-putHealth p i h = do
-    s <- getSlot p i
-    putSlot p i s {sHealth = h}
+putHealth p i h = modifySlot p i $ \s -> s {sHealth = h}
 
 modifyHealth :: Player -> SlotIdx -> Health -> LTGRun ()
 modifyHealth p i dh = do
-    s@(Slot h _) <- getSlot p i
-    zmode <- liftM ltgZombieMode get
+    h <- getHealth p i
     let newH = min 65535 $ max 0 $ h + dh
-    when (isAlive s) $ putSlot p i s {sHealth = newH}
+    when (h > 0) $ putHealth p i newH
 
 unlessZMode :: LTGRun () -> LTGRun ()
 unlessZMode ma = do
@@ -238,9 +235,9 @@ toSlotNumber f = do
 
 incAppCounter :: LTGRun ()
 incAppCounter = do
-    ltg@(LTG _ _ n _ _ _) <- get
+    n <- ltgAppN `liftM` get
     when (n == 1000) $ fail "Native.AppLimitExceeded"
-    put $ ltg {ltgAppN = n + 1}
+    modify $ \ltg -> ltg {ltgAppN = n + 1}
 
 
 ------------------------------------------------------- Low-level slot operations
@@ -261,12 +258,18 @@ transformSlotRaw p i f ltg =
     let s = getSlotRaw Prop i ltg
     in  putSlotRaw Prop i (f s) ltg
 
+addZombie :: Player -> SlotIdx -> LTG -> LTG
+addZombie p i ltg =
+    case p of
+        Prop -> ltg {ltgPropZombies = i:(ltgPropZombies ltg)}
+        Opp  -> ltg {ltgOppZombies = i:(ltgOppZombies ltg)}
+
 defaultHBoard = listArray (0, maxSlotIdx) (repeat $ Slot 10000 (Function cI []))
 
 
 ------------------------------------------------------- Game functions
 
-defaultLTG = LTG defaultHBoard defaultHBoard 0 1 0 False
+defaultLTG = LTG defaultHBoard defaultHBoard [] [] 0 1 0 False
 
 applyCard :: AppOrder -> Card -> SlotIdx -> WriterT [String] (State LTG) ()
 applyCard order c i = do
@@ -295,7 +298,9 @@ applyCard order c i = do
 zombieScan :: WriterT [String] (State LTG) ()
 zombieScan = do
     setZombieMode True
-    mapM_ helper [0..maxSlotIdx]
+    maybeZombies <- ltgPropZombies `liftM` get
+    mapM_ helper (nub $ sort $ maybeZombies)
+    modify $ \ltg -> ltg {ltgPropZombies = []}
     setZombieMode False
     where setZombieMode z = get >>= \l -> put $ l {ltgZombieMode = z}
           helper i = do
@@ -320,7 +325,12 @@ countAlive = do
 swapPlayers :: WriterT [String] (State LTG) ()
 swapPlayers = do
     ltg <- get
-    put ltg {ltgProp = ltgOpp ltg, ltgOpp = ltgProp ltg, ltgPlayer = 1 - ltgPlayer ltg}
+    put ltg {
+        ltgProp = ltgOpp  ltg,
+        ltgOpp  = ltgProp ltg,
+        ltgPropZombies = ltgOppZombies  ltg,
+        ltgOppZombies  = ltgPropZombies ltg,
+        ltgPlayer = 1 - ltgPlayer ltg}
 
 incrementTurn :: WriterT [String] (State LTG) ()
 incrementTurn = get >>= put . \ltg -> ltg {ltgTurn = 1 + ltgTurn ltg}
