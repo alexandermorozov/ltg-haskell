@@ -3,8 +3,9 @@ import Control.Monad.State
 import Control.Monad.Writer
 import Control.Monad.Cont
 import Data.Tuple (swap)
+import Data.List (intercalate)
 import IO
-import System.Environment (getArgs)
+import System.Environment (getArgs, getEnv)
 
 import LTG
 
@@ -71,7 +72,6 @@ naivePutNumber n i = do
     mapM_ (\_ -> step (RightApp, cI, i)) [1..n]
     done
 
-
 runStrategy :: Int -> Strategy Action -> IO ()
 runStrategy playerN s =
     let (DoStep _ a) = strategy (start >> s) defaultLTG
@@ -94,9 +94,17 @@ runStrategy playerN s =
 
           run ltg ma = snd $ runState (runWriterT ma) ltg
 
+strategies = 
+    [ ("dummy", dummyStrategy) 
+    , ("dec", decAttack)
+    ]
+
 main = do
     args <- getArgs
     let i = read $ head args :: Int
-    --runStrategy i dummyStrategy
-    runStrategy i decAttack
-
+    stratName <- getEnv ("BOT"++(show i)) `catch` (\_ -> return "dummy")
+    let s = lookup stratName strategies
+    case s of
+        Just s' -> runStrategy i s'
+        Nothing -> hPutStrLn stderr $ "Unknown strategy. Use one of: " ++
+            (intercalate ", " $ map fst strategies) ++ "."
