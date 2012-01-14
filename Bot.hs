@@ -72,7 +72,6 @@ naivePutNumber n i = do
     done
 
 
--- xx: zombie scan
 runStrategy :: Int -> Strategy Action -> IO ()
 runStrategy playerN s =
     let (DoStep _ a) = strategy (start >> s) defaultLTG
@@ -82,13 +81,18 @@ runStrategy playerN s =
     where myTurn k ltg = do
               let (DoStep (o, c, i) k') = k ltg
               printStep (o, c, i)
-              oppTurn k' $ run (applyCard o c i) ltg
+              oppTurn k' $ run ltg (applyCard o c i)
 
           oppTurn k ltg = do
               (o, c, i) <- liftIO readStep
-              myTurn k $ run (swapPlayers >> applyCard o c i >> swapPlayers) ltg
+              myTurn k $ run ltg $ do
+                swapPlayers
+                zombieScan
+                applyCard o c i
+                swapPlayers
+                zombieScan
 
-          run ma ltg = snd $ runState (runWriterT ma) ltg
+          run ltg ma = snd $ runState (runWriterT ma) ltg
 
 main = do
     args <- getArgs
