@@ -2,6 +2,7 @@ module LTG
     (
       AppOrder (..)
     , LTG (ltgAppN, ltgTurn, ltgPlayer)
+    , Field (Function)
     , Card
     , SlotIdx
     , Player (..)
@@ -13,6 +14,7 @@ module LTG
     , incrementTurn
     , getHealth
     , getField
+    , toIntSafe
     , printHBoard
     , zombieScan
     , countAlive
@@ -228,16 +230,12 @@ toIntSafe f =
                 then return Nothing
                 else (cardF c) args >>= toIntSafe
 
-
 toInt :: (Monad m, MonadState LTG m) => Field -> m Int
-toInt f =
-    case f of
-        Value x -> return x
-        Function c args -> do
-            when (cardN c /= length args) $ fail "Native.Error"
-                        --"Cannot convert incomple f to int"
-            f' <- (cardF c) args
-            toInt f'
+toInt f = do
+    v <- toIntSafe f
+    case v of
+        Just x  -> return x
+        Nothing -> fail "Native.Error"
 
 toSlotNumber :: (Monad m, MonadState LTG m) => Field -> m SlotIdx
 toSlotNumber f = do

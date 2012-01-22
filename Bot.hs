@@ -2,10 +2,11 @@ import Control.Monad
 import Control.Monad.State
 import Control.Monad.Writer
 import Control.Monad.Cont
-import Data.Tuple (swap)
+import Data.Bits (shiftR, (.&.))
 import Data.List (intercalate)
-import IO
+import Data.Tuple (swap)
 import System.Environment (getArgs, getEnv)
+import System.IO
 
 import LTG
 
@@ -65,12 +66,37 @@ decAttack = do
               when (h > 0) $ kill i
 
 
--- xx: draft
-naivePutNumber :: Int -> SlotIdx -> Strategy Action
-naivePutNumber n i = do
-    step (RightApp, cZero, i)
-    mapM_ (\_ -> step (RightApp, cI, i)) [1..n]
+-- xx: fixme
+putNumber :: Int -> SlotIdx -> Strategy Action
+putNumber n i = do
+    f <- getField Prop i
+    mv <- noEffectExec $ toIntSafe f
+    case f of
+        Function cI [] -> step (RightApp, cZero, i)
+        otherwise      ->
+            case mv of
+                Nothing -> step (LeftApp, cPut, i)
+                Just x  -> step (LeftApp, cSucc, i) -- xx
+
+    putNumber n i
     done
+  where opsFromI 0 = 1 -- zero
+        opsFromI n = 1 + msbIdx n + bitCount n -- zero, N dbls, N succs
+        opsFromX n x = 1000 -- xx: fixme
+
+msbIdx 0 = undefined
+msbIdx 1 = 0
+msbIdx n = 1 + (msbIdx $ n `shiftR` 1)
+
+bitCount 0 = 0
+bitCount n = (n .&. 1) + (bitCount $ n `shiftR` 1)
+
+noEffectExec :: Strategy a -> Strategy a
+noEffectExec m = do
+    s <- get
+    a <- m
+    put s
+    return a
 
 runStrategy :: Int -> Strategy Action -> IO ()
 runStrategy playerN s =

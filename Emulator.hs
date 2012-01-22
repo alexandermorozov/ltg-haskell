@@ -1,5 +1,5 @@
-import IO
 import System.Environment (getArgs)
+import System.IO
 import System.Process
 import Control.Monad.State
 import Control.Monad.Writer
