@@ -12,6 +12,7 @@ module LTG
     , swapPlayers
     , incrementTurn
     , getHealth
+    , getField
     , printHBoard
     , zombieScan
     , countAlive
@@ -30,7 +31,7 @@ import Data.List
 
 data    Card   = Card { cardName :: String
                       , cardN :: Int
-                      , cardF :: ([Field] -> LTGRun Field)
+                      , cardF :: ((Monad m, MonadState LTG m) => [Field] -> m Field)
                       }
 
 data    Field  = Value Int | Function Card [Field]
@@ -166,13 +167,13 @@ cLookup name = head $ filter match allCards
 getSlot :: (Monad m, MonadState LTG m) => Player -> SlotIdx -> m Slot
 getSlot p i = liftM (getSlotRaw p i) get
 
-putSlot :: Player -> SlotIdx -> Slot -> LTGRun ()
+putSlot :: (Monad m, MonadState LTG m) => Player -> SlotIdx -> Slot -> m ()
 putSlot p i s = modify $ putSlotRaw p i s
 
-modifySlot :: Player -> SlotIdx -> (Slot -> Slot) -> LTGRun ()
+modifySlot ::  (Monad m, MonadState LTG m) => Player -> SlotIdx -> (Slot -> Slot) -> m ()
 modifySlot p i fn = liftM fn (getSlot p i) >>= putSlot p i
 
-putField :: Player -> SlotIdx -> Field -> LTGRun ()
+putField :: (Monad m, MonadState LTG m) => Player -> SlotIdx -> Field -> m ()
 putField p i f = modifySlot p i $ \s -> s {sField = f}
 
 getField :: (Monad m, MonadState LTG m) => Player -> SlotIdx -> m Field
@@ -181,23 +182,23 @@ getField p i = sField `liftM` getSlot p i
 getHealth :: (Monad m, MonadState LTG m) => Player -> SlotIdx -> m Int
 getHealth p i = sHealth `liftM` getSlot p i
 
-putHealth :: Player -> SlotIdx -> Health -> LTGRun ()
+putHealth :: (Monad m, MonadState LTG m) => Player -> SlotIdx -> Health -> m ()
 putHealth p i h = modifySlot p i $ \s -> s {sHealth = h}
 
-modifyHealth :: Player -> SlotIdx -> Health -> LTGRun ()
+modifyHealth :: (Monad m, MonadState LTG m) => Player -> SlotIdx -> Health -> m ()
 modifyHealth p i dh = do
     h <- getHealth p i
     let newH = min 65535 $ max 0 $ h + dh
     when (h > 0) $ putHealth p i newH
 
-unlessZMode :: LTGRun () -> LTGRun ()
+unlessZMode ::  (Monad m, MonadState LTG m) => m () -> m ()
 unlessZMode ma = do
     zmode <- liftM ltgZombieMode get
     if zmode
         then return ()
         else ma
 
-zombieInversion :: Int -> LTGRun Int
+zombieInversion :: (Monad m, MonadState LTG m) => Int -> m Int
 zombieInversion x = do
     zmode <- liftM ltgZombieMode get
     return (if zmode; then (-x); else x)
@@ -205,9 +206,10 @@ zombieInversion x = do
 isAlive :: Slot -> Bool
 isAlive s = sHealth s > 0
 
+returnI :: (Monad m, MonadState LTG m) => m Field
 returnI = return $ Function cI []
 
-apply :: Field -> Field -> LTGRun Field
+apply :: (Monad m, MonadState LTG m) => Field -> Field -> m Field
 apply a b =
     case a of
         Value _ -> fail "Not a function"
@@ -217,7 +219,17 @@ apply a b =
                 1 -> incAppCounter >> (cardF cA) (argsA ++ [b])
                 _ -> return $ Function cA $ argsA ++ [b]
 
-toInt :: Field -> LTGRun Int
+toIntSafe :: (Monad m, MonadState LTG m) => Field -> m (Maybe Int)
+toIntSafe f =
+    case f of
+        Value x -> return $ Just x
+        Function c args -> do
+            if cardN c /= length args
+                then return Nothing
+                else (cardF c) args >>= toIntSafe
+
+
+toInt :: (Monad m, MonadState LTG m) => Field -> m Int
 toInt f =
     case f of
         Value x -> return x
@@ -227,13 +239,13 @@ toInt f =
             f' <- (cardF c) args
             toInt f'
 
-toSlotNumber :: Field -> LTGRun SlotIdx
+toSlotNumber :: (Monad m, MonadState LTG m) => Field -> m SlotIdx
 toSlotNumber f = do
     i <- toInt f
     when (i > maxSlotIdx || i < 0) $ fail "Invalid slot number"
     return i
 
-incAppCounter :: LTGRun ()
+incAppCounter :: (Monad m, MonadState LTG m) => m ()
 incAppCounter = do
     n <- ltgAppN `liftM` get
     when (n == 1000) $ fail "Native.AppLimitExceeded"

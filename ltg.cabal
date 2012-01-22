@@ -9,12 +9,12 @@ Build-Type:     Simple
 Executable ltg-emulator
   Main-Is:        Emulator.hs
   Other-Modules:  LTG
-  Build-Depends:  base, mtl, array, process, haskell98
-  Extensions:     DoAndIfThenElse, FlexibleContexts
+  Build-Depends:  base, mtl, array, process
+  Extensions:     DoAndIfThenElse, FlexibleContexts, Rank2Types
 
 Executable ltg-bot
   Main-Is:        Bot.hs
   Other-Modules:  LTG
-  Build-Depends:  base, mtl, array, process, haskell98
-  Extensions:     DoAndIfThenElse, FlexibleContexts
+  Build-Depends:  base, mtl, array, process
+  Extensions:     DoAndIfThenElse, FlexibleContexts, Rank2Types
 
