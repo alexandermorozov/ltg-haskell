@@ -21,7 +21,7 @@ runL ma = do
 oneStep :: Handle -> Maybe Handle -> StateT LTG IO ()
 oneStep hIn mOut = do
     playerNo <- liftM ltgPlayer get
-    liftIO . putStrLn $ "*** player " ++ show(playerNo) ++ "'s turn, with slots:"
+    liftIO . putStrLn $ "*** player " ++ show playerNo ++ "'s turn, with slots:"
     runL $ printHBoard Prop
     liftIO . putStrLn $ "(slots {10000,I} are omitted)"
 
@@ -55,14 +55,14 @@ oneStep hIn mOut = do
         onOrder order a b = case order of LeftApp -> a; RightApp -> b
 
         showChoice pn order card slot =
-            let p1 = ["player ", show(pn), " applied "]
+            let p1 = ["player ", show pn, " applied "]
                 x  = onOrder order id swap ("card " ++ show card, "slot " ++ show slot)
             in concat $ p1 ++ [fst x, " to ", snd x]
 
         showChoice4Bot order card slot =
             let p1 = show $ orderToInt order
-                p2 = onOrder order id reverse $ [show card, show slot]
-            in concat $ map (++"\n") (p1:p2)
+                p2 = onOrder order id reverse [show card, show slot]
+            in unlines (p1:p2)
 
 printTurn :: StateT LTG IO ()
 printTurn = get >>= \ltg -> liftIO $ putStrLn $ "###### turn " ++ show(ltgTurn ltg)
@@ -115,11 +115,9 @@ runMatch [prog0, prog1] = do
             turn <- liftM ltgTurn get
             playerI <- liftM ltgPlayer get
             let msg = compose l0 l1 turn
-            if (l0 == 0 || l1 == 0)
+            if (l0 == 0 || l1 == 0) || (turn == 100000 && playerI == 1)
                 then return (Just msg)
-                else if turn == 100000 && playerI == 1
-                    then return (Just msg)
-                    else return Nothing
+                else return Nothing
             where compose l0 l1 turn =
                       let msg2 = " by " ++ show l0 ++ ":" ++ show l1 ++
                                  " after turn " ++ show turn
@@ -132,7 +130,7 @@ runMatch [prog0, prog1] = do
 
 main = do
     args <- getArgs
-    when (length args == 0) $ fail "Usage: ./xx only|alt|match [prog1] [prog2]"
+    when (null args) $ fail "Usage: ./xx only|alt|match [prog1] [prog2]"
     case head args of
         "only"  -> runOnly
         "alt"   -> runAlt

@@ -29,7 +29,7 @@ readStep = do
 
 printStep :: (AppOrder, Card, SlotIdx) -> IO ()
 printStep (o, c, i) = do
-    putStrLn $ show $ orderToInt o
+    print $ orderToInt o
     let (s1, s2) = swapOrder o (show c, show i)
     putStrLn s1
     putStrLn s2
@@ -44,8 +44,8 @@ type Strategy a = StateT LTG (Cont Action) a
 
 strategy s ltg = runCont (runStateT s ltg) (\_ -> Done)
 start = step (LeftApp, cI, 0) -- first step is thrown out
-step a = (lift $ cont $ \k -> DoStep a k) >>= put
-done   = lift $ cont $ \_ -> Done
+step a = lift (cont $ \k -> DoStep a k) >>= put
+done   = lift (cont $ \_ -> Done)
 
 
 
@@ -86,10 +86,10 @@ putNumber n i = do
 
 msbIdx 0 = undefined
 msbIdx 1 = 0
-msbIdx n = 1 + (msbIdx $ n `shiftR` 1)
+msbIdx n = 1 + msbIdx (n `shiftR` 1)
 
 bitCount 0 = 0
-bitCount n = (n .&. 1) + (bitCount $ n `shiftR` 1)
+bitCount n = (n .&. 1) + bitCount (n `shiftR` 1)
 
 noEffectExec :: Strategy a -> Strategy a
 noEffectExec m = do
@@ -128,9 +128,9 @@ strategies =
 main = do
     args <- getArgs
     let i = read $ head args :: Int
-    stratName <- getEnv ("BOT"++(show i)) `catch` (\_ -> return "dummy")
+    stratName <- getEnv ("BOT" ++ show i) `catch` (\_ -> return "dummy")
     let s = lookup stratName strategies
     case s of
         Just s' -> runStrategy i s'
         Nothing -> hPutStrLn stderr $ "Unknown strategy. Use one of: " ++
-            (intercalate ", " $ map fst strategies) ++ "."
+            intercalate ", " (map fst strategies) ++ "."

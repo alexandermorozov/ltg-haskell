@@ -24,16 +24,15 @@ module LTG
 
 import Data.Array
 import Text.Printf
-import Data.List (intercalate)
+import Data.List (intercalate, foldl', nub, sort)
 import Control.Monad.State
 import Control.Monad.Error
 import Control.Monad.Writer
 import Debug.Trace
-import Data.List
 
 data    Card   = Card { cardName :: String
                       , cardN :: Int
-                      , cardF :: ((Monad m, MonadState LTG m) => [Field] -> m Field)
+                      , cardF :: (Monad m, MonadState LTG m) => [Field] -> m Field
                       }
 
 data    Field  = Value Int | Function Card [Field]
@@ -60,15 +59,15 @@ instance Eq Card where
     c == c' = cardName c == cardName c'
 
 instance Show Card where
-    show c = cardName c
+    show = cardName
 
 -- xx: not sure at all if I got this right, need one more pass
 instance Show Field where 
     show a = shows a ""
     showsPrec _ (Value v) = shows v
     showsPrec _ (Function c []) = (++) (cardName c)
-    showsPrec _ (Function c args) = (foldl' (.) ((++) $ cardName c)
-                    (map (\x -> ('(':) . (shows x) . (')':)) args))
+    showsPrec _ (Function c args) = foldl' (.) ((++) $ cardName c)
+                    (map (\x -> ('(':) . shows x . (')':)) args)
 
 
 maxSlotIdx = 255
@@ -196,14 +195,12 @@ modifyHealth p i dh = do
 unlessZMode ::  (Monad m, MonadState LTG m) => m () -> m ()
 unlessZMode ma = do
     zmode <- liftM ltgZombieMode get
-    if zmode
-        then return ()
-        else ma
+    unless zmode ma
 
 zombieInversion :: (Monad m, MonadState LTG m) => Int -> m Int
 zombieInversion x = do
     zmode <- liftM ltgZombieMode get
-    return (if zmode; then (-x); else x)
+    return $ if zmode then (-x) else x
 
 isAlive :: Slot -> Bool
 isAlive s = sHealth s > 0
@@ -218,17 +215,17 @@ apply a b =
         Function cA argsA ->
             case cardN cA - length argsA of
                 0 -> fail "Native.Error" -- "Too many arguments"
-                1 -> incAppCounter >> (cardF cA) (argsA ++ [b])
+                1 -> incAppCounter >> cardF cA (argsA ++ [b])
                 _ -> return $ Function cA $ argsA ++ [b]
 
 toIntSafe :: (Monad m, MonadState LTG m) => Field -> m (Maybe Int)
 toIntSafe f =
     case f of
         Value x -> return $ Just x
-        Function c args -> do
+        Function c args ->
             if cardN c /= length args
                 then return Nothing
-                else (cardF c) args >>= toIntSafe
+                else cardF c args >>= toIntSafe
 
 toInt :: (Monad m, MonadState LTG m) => Field -> m Int
 toInt f = do
@@ -254,14 +251,14 @@ incAppCounter = do
 
 getSlotRaw :: Player -> SlotIdx -> LTG -> Slot
 getSlotRaw p i ltg =
-    let selector = if (p == Prop) then ltgProp else ltgOpp
-    in (selector ltg) ! i
+    let selector = if p == Prop then ltgProp else ltgOpp
+    in selector ltg ! i
 
 putSlotRaw :: Player -> SlotIdx -> Slot -> LTG -> LTG
 putSlotRaw p i s ltg =
-    if (p == Prop)
-        then ltg {ltgProp = (ltgProp ltg) // [(i, s)]}
-        else ltg {ltgOpp  = (ltgOpp  ltg) // [(i, s)]}
+    if p == Prop
+        then ltg {ltgProp = ltgProp ltg // [(i, s)]}
+        else ltg {ltgOpp  = ltgOpp  ltg // [(i, s)]}
 
 transformSlotRaw :: Player -> SlotIdx -> (Slot -> Slot) -> LTG -> LTG
 transformSlotRaw p i f ltg =
@@ -271,8 +268,8 @@ transformSlotRaw p i f ltg =
 addZombie :: Player -> SlotIdx -> LTG -> LTG
 addZombie p i ltg =
     case p of
-        Prop -> ltg {ltgPropZombies = i:(ltgPropZombies ltg)}
-        Opp  -> ltg {ltgOppZombies = i:(ltgOppZombies ltg)}
+        Prop -> ltg {ltgPropZombies = i : ltgPropZombies ltg}
+        Opp  -> ltg {ltgOppZombies = i : ltgOppZombies ltg}
 
 defaultHBoard = listArray (0, maxSlotIdx) (repeat $ Slot 10000 (Function cI []))
 
@@ -309,14 +306,14 @@ zombieScan :: WriterT [String] (State LTG) ()
 zombieScan = do
     setZombieMode True
     maybeZombies <- ltgPropZombies `liftM` get
-    mapM_ helper (nub $ sort $ maybeZombies)
+    mapM_ helper (nub $ sort maybeZombies)
     modify $ \ltg -> ltg {ltgPropZombies = []}
     setZombieMode False
     where setZombieMode z = get >>= \l -> put $ l {ltgZombieMode = z}
           helper i = do
             s <- liftM (getSlotRaw Prop i) get
             when (sHealth s == -1) $ do
-                tell ["applying zombie slot 1={-1," ++ (show $ sField s) ++ "} to I"]
+                tell ["applying zombie slot 1={-1," ++ show (sField s) ++ "} to I"]
                 applyCard RightApp cI i
                 resetField i
           resetField i = get >>=
@@ -348,7 +345,7 @@ incrementTurn = get >>= put . \ltg -> ltg {ltgTurn = 1 + ltgTurn ltg}
 printHBoard :: Player -> WriterT [String] (State LTG) ()
 printHBoard p = do
     ltg <- get
-    let slots = if (p == Prop) then ltgProp ltg else ltgOpp ltg
+    let slots = if p == Prop then ltgProp ltg else ltgOpp ltg
     let changed = filter hasChanged (assocs slots)
     mapM_ (tell . format) changed
     where
