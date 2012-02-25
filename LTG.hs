@@ -260,10 +260,10 @@ putSlotRaw p i s ltg =
         then ltg {ltgProp = ltgProp ltg // [(i, s)]}
         else ltg {ltgOpp  = ltgOpp  ltg // [(i, s)]}
 
-transformSlotRaw :: Player -> SlotIdx -> (Slot -> Slot) -> LTG -> LTG
-transformSlotRaw p i f ltg =
+resetFieldRaw :: Player -> SlotIdx -> LTG -> LTG
+resetFieldRaw p i ltg =
     let s = getSlotRaw Prop i ltg
-    in  putSlotRaw Prop i (f s) ltg
+    in  putSlotRaw Prop i (s {sField = Function cI []}) ltg
 
 addZombie :: Player -> SlotIdx -> LTG -> LTG
 addZombie p i ltg =
@@ -281,12 +281,12 @@ defaultLTG = LTG defaultHBoard defaultHBoard [] [] 0 1 0 False
 applyCard :: AppOrder -> Card -> SlotIdx -> WriterT [String] (State LTG) ()
 applyCard order c i = do
     ltg <- get
-    let (err, ltg') =  runState (runErrorT mainApp) ltg {ltgAppN = 0}
+    let (err, ltg') = runState (runErrorT mainApp) ltg {ltgAppN = 0}
     put ltg'
     case err of
         Right _ -> return ()
         Left e  -> do
-            resetField
+            modify $ resetFieldRaw Prop i
             tell ["Exception: " ++ e]
             tell ["slot " ++ show i ++ " reset to I"]
 
@@ -298,8 +298,6 @@ applyCard order c i = do
                     RightApp -> apply f (Function c [])
             putField Prop i f'
 
-          resetField = get >>= 
-            put . transformSlotRaw Prop i (\s -> s {sField = Function cI []})
 
 -- scans only proponent's field
 zombieScan :: WriterT [String] (State LTG) ()
@@ -309,15 +307,13 @@ zombieScan = do
     mapM_ helper (nub $ sort maybeZombies)
     modify $ \ltg -> ltg {ltgPropZombies = []}
     setZombieMode False
-    where setZombieMode z = get >>= \l -> put $ l {ltgZombieMode = z}
+    where setZombieMode z = modify $ \l -> l {ltgZombieMode = z}
           helper i = do
             s <- gets (getSlotRaw Prop i)
             when (sHealth s == -1) $ do
                 tell ["applying zombie slot 1={-1," ++ show (sField s) ++ "} to I"]
                 applyCard RightApp cI i
-                resetField i
-          resetField i = get >>=
-            put . transformSlotRaw Prop i (\s -> Slot 0 (Function cI []))
+                modify $ putSlotRaw Prop i (Slot 0 (Function cI []))
 
 countAlive :: WriterT [String] (State LTG) (Int, Int) -- player0, player1
 countAlive = do
@@ -331,8 +327,7 @@ countAlive = do
 
 swapPlayers :: WriterT [String] (State LTG) ()
 swapPlayers = do
-    ltg <- get
-    put ltg {
+    modify $ \ltg -> ltg {
         ltgProp = ltgOpp  ltg,
         ltgOpp  = ltgProp ltg,
         ltgPropZombies = ltgOppZombies  ltg,
@@ -340,7 +335,7 @@ swapPlayers = do
         ltgPlayer = 1 - ltgPlayer ltg}
 
 incrementTurn :: WriterT [String] (State LTG) ()
-incrementTurn = get >>= put . \ltg -> ltg {ltgTurn = 1 + ltgTurn ltg}
+incrementTurn = modify $ \ltg -> ltg {ltgTurn = 1 + ltgTurn ltg}
 
 printHBoard :: Player -> WriterT [String] (State LTG) ()
 printHBoard p = do
