@@ -194,12 +194,12 @@ modifyHealth p i dh = do
 
 unlessZMode ::  (Monad m, MonadState LTG m) => m () -> m ()
 unlessZMode ma = do
-    zmode <- liftM ltgZombieMode get
+    zmode <- gets ltgZombieMode
     unless zmode ma
 
 zombieInversion :: (Monad m, MonadState LTG m) => Int -> m Int
 zombieInversion x = do
-    zmode <- liftM ltgZombieMode get
+    zmode <- gets ltgZombieMode
     return $ if zmode then (-x) else x
 
 isAlive :: Slot -> Bool
@@ -242,7 +242,7 @@ toSlotNumber f = do
 
 incAppCounter :: (Monad m, MonadState LTG m) => m ()
 incAppCounter = do
-    n <- ltgAppN `liftM` get
+    n <- gets ltgAppN
     when (n == 1000) $ fail "Native.AppLimitExceeded"
     modify $ \ltg -> ltg {ltgAppN = n + 1}
 
@@ -305,13 +305,13 @@ applyCard order c i = do
 zombieScan :: WriterT [String] (State LTG) ()
 zombieScan = do
     setZombieMode True
-    maybeZombies <- ltgPropZombies `liftM` get
+    maybeZombies <- gets ltgPropZombies
     mapM_ helper (nub $ sort maybeZombies)
     modify $ \ltg -> ltg {ltgPropZombies = []}
     setZombieMode False
     where setZombieMode z = get >>= \l -> put $ l {ltgZombieMode = z}
           helper i = do
-            s <- liftM (getSlotRaw Prop i) get
+            s <- gets (getSlotRaw Prop i)
             when (sHealth s == -1) $ do
                 tell ["applying zombie slot 1={-1," ++ show (sField s) ++ "} to I"]
                 applyCard RightApp cI i
